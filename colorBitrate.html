@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>ALL-SERVERS-STATS-FETCH WITH COLOR</title>
+
+  <style>
+    body {
+      background-color: rgba(0, 0, 0, 0);
+      margin: 0px auto;
+      font-family: 'Open Sans', sans-serif;
+      overflow: hidden;
+      color: green;
+      font-size: 22px;
+      font-weight: 700;
+      text-align: right;
+      padding: 5px;
+    }
+
+    #bitrate * {
+      vertical-align: middle;
+    }
+
+    #rtt * {
+      vertical-align: middle;
+    }
+  </style>
+
+</head>
+
+<body>
+
+  <div id="block_container">
+    <div id="bitrate"></div>
+    <div id="rtt"></div>
+  </div>
+
+  <script>
+    const tryFetch = async (page) => {
+      try {
+        return await fetch(page);
+      } catch (error) {
+        console.log(page, error);
+      }
+      return null;
+    }
+
+    const getSrtBitrate = async (page, publisher) => {
+      const response = await tryFetch(page);
+      if (!response) return null;
+
+      const srtdata = await response.json();
+      if (srtdata.publishers[publisher] == null) return null;
+
+      const { bitrate, rtt } = srtdata.publishers[publisher];
+      return { bitrate, rtt };
+    };
+
+    const getNmsBitrate = async (page) => {
+      const response = await tryFetch(page);
+      if (!response) return null;
+
+      const { bitrate } = await response.json();
+      if (!bitrate) return null;
+
+      return { bitrate };
+    };
+
+    const getNginxBitrate = async (page, key) => {
+      const response = await tryFetch(page);
+      if (!response) return null;
+
+      const data = await response.text();
+      const parse = new window.DOMParser().parseFromString(data, "text/xml");
+      const live = parse.getElementsByTagName(key)[0];
+
+      const node = live.childNodes[1].childNodes[14];
+      if (!node) return null;
+
+      const bitrate = Math.round(node.childNodes[0].nodeValue / 1024);
+      return { bitrate };
+    };
+
+    const run = async (stats, interval) => {
+      setText(await getBitrate(stats));
+
+      setInterval(async () => {
+        setText(await getBitrate(stats));
+      }, interval);
+    }
+
+    const getBitrate = async (stats) => {
+      const get = {
+        "SRT": getSrtBitrate,
+        "NMS": getNmsBitrate,
+        "NGINX": getNginxBitrate,
+      }
+
+      const values = await Promise.all(stats.map(s => get[s.server](s.page, s.key)));
+      const index = values.findIndex(el => el);
+
+      return [values[index], stats[index]];
+    }
+
+    const setText = (stats) => {
+      [stats, origin] = stats;
+      const { bitrate, rtt } = stats || {};
+      const el = document.getElementById('bitrate');
+      const elrtt = document.getElementById('rtt');
+
+      if (!bitrate) {
+        el.innerHTML = "NO SIGNAL";
+        el.style.color = 'red';
+        elrtt.innerHTML = null;
+        return;
+      }
+
+      el.innerHTML = `${bitrate} kb/s`;
+
+      // Set value and color based on bitrate
+      if (bitrate <= 1200) {
+        el.style.color = 'red';
+      } else if (bitrate <= 2500) {
+        el.style.color = 'orange';
+      } else {
+        el.style.color = 'green';
+      }
+
+      if (origin && origin.rtt) {
+        elrtt.innerHTML = `• ${Math.round(rtt)} ms`;
+
+        // Set value and color based on rtt
+        if (rtt >= 250) {
+          elrtt.style.color = 'red';
+        } else if (rtt >= 120) {
+          elrtt.style.color = 'orange';
+        } else {
+          elrtt.style.color = 'green';
+        }
+      } else {
+        elrtt.innerHTML = '';
+      }
+    }
+  </script>
+
+  <script>
+    const interval = 2000;
+    const stats = [
+      { server: "SRT", page: "http://127.0.0.1:8181/stats", key: "publish/live/test", rtt: true },
+      { server: "NMS", page: "http://localhost:8000/api/streams/live/feed1" },
+      // Example with username and password in the URL:
+      { server: "NMS", page: "http://admin:admin@localhost:8000/api/streams/live/feed1" },
+      { server: "NGINX", page: "http://localhost/stat", key: "live" }
+    ];
+
+    run(stats, interval);
+  </script>
+
+</body>
+
+</html>

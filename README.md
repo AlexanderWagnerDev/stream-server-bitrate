@@ -1,0 +1,5 @@
+# Stream Server Bitrate
+This is a bitrate overlay (based on https://github.com/b3ck/server-bitrate-html), but with color changes when the bitrate/RTT gets worse. If the bitrate is 2500 kbps or below, the text color turns orange, and if it's 1200 kbps or below, it turns red. Everything above 2500 kbps is green. For RTT, it's similar: the text color turns orange at 120 ms and red at 250 ms. The colors change independently of each other, so, for example, the bitrate can be red at 900 kbps while the RTT is green at 65 ms.
+
+#### German/Deutsch:
+Das ist eine Bitrate-Overlay (basiert auf https://github.com/b3ck/server-bitrate-html), aber mit Farbe, wenn die Bitrate/RTT schlechter wird. Wenn die Bitrate 2500 kb/s oder darunter ist, wird die Schriftfarbe orange und bei 1200 kb/s oder darunter rot. Alles über 2500 kb/s ist grün. Bei RTT genauso, wobei ab 120 ms die Schriftfarbe orange und ab 250 ms rot ist. Die Farben ändern sich unabhängig voneinander, also kann z.B. die Bitrate mit 900 kb/s rot sein, während die RTT mit 65 ms grün ist.
