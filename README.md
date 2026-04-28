@@ -47,39 +47,39 @@ const interval = 2000; // polling interval in ms
 
 const servers = [
   // SRT-Live-Server (SLS)
-  { type: "SRT",     page: "http://127.0.0.1:8181/stats", publisher: "publish/live/test", show_rtt: true },
+  { type: "SRT",     page: "http://127.0.0.1:8181/stats",    publisher: "publish/live/test", show_rtt: true },
 
-  // OpenIRL SRT server (slightly different JSON structure)
-  // { type: "OPENIRL", page: "http://127.0.0.1:8181/stats", publisher: "publish/live/test", show_rtt: true },
+  // OpenIRL SRT server — key is appended to the page URL
+  // { type: "OpenIRL", page: "http://127.0.0.1:8080/stats", key: "play_60a0055a7fdb436d92fab3a943f5c55c", show_rtt: true },
 
   // Node-Media-Server
   // { type: "NMS",     page: "http://localhost:8000/api/streams/live/feed1" },
   // { type: "NMS",     page: "http://admin:admin@localhost:8000/api/streams/live/feed1" },
 
   // nginx-rtmp
-  // { type: "NGINX",   page: "http://localhost/stat", key: "live" },
+  // { type: "NGINX",   page: "http://localhost/stat",        key: "live" },
 ];
 ```
 
 ### Server Types
 
-| Type      | Description                                      | Required fields              |
-|-----------|--------------------------------------------------|------------------------------|
-| `SRT`     | SRT-Live-Server `/stats` JSON endpoint           | `page`, `publisher`          |
-| `OPENIRL` | OpenIRL SRT server stats (different JSON layout) | `page`, `publisher`          |
-| `NMS`     | Node-Media-Server REST API                       | `page`                       |
-| `NGINX`   | nginx-rtmp `/stat` XML endpoint                  | `page`, `key`                |
+| Type       | Description                                           | Required fields     |
+|------------|-------------------------------------------------------|---------------------|
+| `SRT`      | SRT-Live-Server `/stats` JSON endpoint                | `page`, `publisher` |
+| `OpenIRL`  | OpenIRL SRT server — key appended to URL              | `page`, `key`       |
+| `NMS`      | Node-Media-Server REST API                            | `page`              |
+| `NGINX`    | nginx-rtmp `/stat` XML endpoint                       | `page`, `key`       |
 
 ### Options per Server Entry
 
-| Option       | Type    | Description                                               |
-|--------------|---------|-----------------------------------------------------------|
-| `type`       | string  | Server type: `"SRT"`, `"OPENIRL"`, `"NMS"`, `"NGINX"`    |
-| `page`       | string  | Full URL of the stats endpoint                            |
-| `publisher`  | string  | Stream key path (SRT / OpenIRL only)                      |
-| `key`        | string  | XML tag name (NGINX only)                                 |
-| `show_rtt`   | boolean | Show RTT row below bitrate (SRT / OpenIRL only)           |
-| `show_label` | boolean | Show a small server-type badge next to the value          |
+| Option       | Type    | Description                                                  |
+|--------------|---------|--------------------------------------------------------------|
+| `type`       | string  | Server type: `"SRT"`, `"OpenIRL"`, `"NMS"`, `"NGINX"`       |
+| `page`       | string  | Base URL of the stats endpoint                               |
+| `publisher`  | string  | Stream key path (SRT only)                                   |
+| `key`        | string  | Stream key appended to URL (OpenIRL) or XML tag name (NGINX) |
+| `show_rtt`   | boolean | Show RTT row below bitrate (SRT / OpenIRL only)              |
+| `show_label` | boolean | Show a small server-type badge next to the value             |
 
 ---
 
@@ -146,27 +146,27 @@ const interval = 2000; // Abfrageintervall in ms
 
 const servers = [
   // SRT-Live-Server (SLS)
-  { type: "SRT",     page: "http://127.0.0.1:8181/stats", publisher: "publish/live/test", show_rtt: true },
+  { type: "SRT",     page: "http://127.0.0.1:8181/stats",    publisher: "publish/live/test", show_rtt: true },
 
-  // OpenIRL SRT-Server (leicht anderes JSON-Format)
-  // { type: "OPENIRL", page: "http://127.0.0.1:8181/stats", publisher: "publish/live/test", show_rtt: true },
+  // OpenIRL SRT-Server — key wird an die URL angehängt
+  // { type: "OpenIRL", page: "http://127.0.0.1:8080/stats", key: "play_60a0055a7fdb436d92fab3a943f5c55c", show_rtt: true },
 
   // Node-Media-Server
   // { type: "NMS",     page: "http://localhost:8000/api/streams/live/feed1" },
 
   // nginx-rtmp
-  // { type: "NGINX",   page: "http://localhost/stat", key: "live" },
+  // { type: "NGINX",   page: "http://localhost/stat",        key: "live" },
 ];
 ```
 
 ### Server-Typen
 
-| Typ       | Beschreibung                                             | Pflichtfelder                |
-|-----------|----------------------------------------------------------|------------------------------|
-| `SRT`     | SRT-Live-Server `/stats` JSON-Endpoint                   | `page`, `publisher`          |
-| `OPENIRL` | OpenIRL SRT-Server Stats (anderes JSON-Layout)           | `page`, `publisher`          |
-| `NMS`     | Node-Media-Server REST API                               | `page`                       |
-| `NGINX`   | nginx-rtmp `/stat` XML-Endpoint                          | `page`, `key`                |
+| Typ        | Beschreibung                                              | Pflichtfelder       |
+|------------|-----------------------------------------------------------|---------------------|
+| `SRT`      | SRT-Live-Server `/stats` JSON-Endpoint                    | `page`, `publisher` |
+| `OpenIRL`  | OpenIRL SRT-Server — key wird an URL angehängt            | `page`, `key`       |
+| `NMS`      | Node-Media-Server REST API                                | `page`              |
+| `NGINX`    | nginx-rtmp `/stat` XML-Endpoint                           | `page`, `key`       |
 
 ---
 

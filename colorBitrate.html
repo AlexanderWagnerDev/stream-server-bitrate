@@ -82,7 +82,7 @@
     //               publisher = the stream key path, e.g. "publish/live/mykey"
     //               Response structure: { publishers: { "publish/live/mykey": { bitrate, rtt } } }
     //
-    //   "OPENIRL" — OpenIRL SRT server stats
+    //   "OpenIRL" — OpenIRL SRT server stats
     //               Required fields: page, key
     //               page = base URL, e.g. "http://host:8080/stats"
     //               key  = stream key appended to URL, e.g. "play_60a0055a7fdb436d92fab3a943f5c55c"
@@ -97,24 +97,24 @@
     //   "NGINX"   — nginx-rtmp-module /stat XML endpoint
     //               Required fields: page, key  (the XML tag to parse, usually "live")
     //
-    // show_rtt:   (optional) show RTT row below bitrate — only for SRT and OPENIRL
+    // show_rtt:   (optional) show RTT row below bitrate — only for SRT and OpenIRL
     // show_label: (optional) show a small server-type badge next to the value
     //
     const interval = 2000;
 
     const servers = [
       // SRT-Live-Server (SLS)
-      { type: "SRT",     page: "http://127.0.0.1:8181/stats",     publisher: "publish/live/test", show_rtt: true },
+      { type: "SRT",     page: "http://127.0.0.1:8181/stats",    publisher: "publish/live/test", show_rtt: true },
 
       // OpenIRL SRT server — key is appended to the page URL
-      // { type: "OPENIRL", page: "http://127.0.0.1:8080/stats",  key: "play_60a0055a7fdb436d92fab3a943f5c55c", show_rtt: true },
+      // { type: "OpenIRL", page: "http://127.0.0.1:8080/stats", key: "play_60a0055a7fdb436d92fab3a943f5c55c", show_rtt: true },
 
       // Node-Media-Server
       // { type: "NMS",     page: "http://localhost:8000/api/streams/live/feed1" },
       // { type: "NMS",     page: "http://admin:admin@localhost:8000/api/streams/live/feed1" },
 
       // nginx-rtmp
-      // { type: "NGINX",   page: "http://localhost/stat",         key: "live" },
+      // { type: "NGINX",   page: "http://localhost/stat",        key: "live" },
     ];
     // ─────────────────────────────────────────────────────────────────────────────
 
@@ -186,7 +186,7 @@
 
     const fetchers = {
       SRT:     fetchSRT,
-      OPENIRL: fetchOpenIRL,
+      OpenIRL: fetchOpenIRL,
       NMS:     fetchNMS,
       NGINX:   fetchNGINX,
     };
