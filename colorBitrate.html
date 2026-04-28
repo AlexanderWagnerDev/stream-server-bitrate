@@ -80,11 +80,15 @@
     //   "SRT"     — SRT-Live-Server stats JSON  (e.g. SLS /stats)
     //               Required fields: page, publisher
     //               publisher = the stream key path, e.g. "publish/live/mykey"
+    //               Response structure: { publishers: { "publish/live/mykey": { bitrate, rtt } } }
     //
-    //   "OPENIRL" — OpenIRL SRT stats JSON  (same endpoint style but different
-    //               JSON structure: srtdata[publisher].bitrate / .rtt)
-    //               Required fields: page, publisher
-    //               publisher = stream key, e.g. "publish/live/mykey"
+    //   "OPENIRL" — OpenIRL SRT server stats
+    //               Required fields: page, key
+    //               page = base URL, e.g. "http://host:8080/stats"
+    //               key  = stream key appended to URL, e.g. "play_60a0055a7fdb436d92fab3a943f5c55c"
+    //               Full URL becomes: http://host:8080/stats/play_60a0055a7fdb436d92fab3a943f5c55c
+    //               Response structure: { publisher: { bitrate, rtt }, status: "ok" }
+    //               No signal when publisher is missing or bitrate === 0
     //
     //   "NMS"     — Node-Media-Server REST API
     //               Required fields: page
@@ -93,23 +97,24 @@
     //   "NGINX"   — nginx-rtmp-module /stat XML endpoint
     //               Required fields: page, key  (the XML tag to parse, usually "live")
     //
-    // show_label: (optional) set to true to show a small server-type label next to the value
+    // show_rtt:   (optional) show RTT row below bitrate — only for SRT and OPENIRL
+    // show_label: (optional) show a small server-type badge next to the value
     //
     const interval = 2000;
 
     const servers = [
       // SRT-Live-Server (SLS)
-      { type: "SRT",     page: "http://127.0.0.1:8181/stats",                    publisher: "publish/live/test", show_rtt: true },
+      { type: "SRT",     page: "http://127.0.0.1:8181/stats",     publisher: "publish/live/test", show_rtt: true },
 
-      // OpenIRL SRT server
-      // { type: "OPENIRL", page: "http://127.0.0.1:8181/stats",                 publisher: "publish/live/test", show_rtt: true },
+      // OpenIRL SRT server — key is appended to the page URL
+      // { type: "OPENIRL", page: "http://127.0.0.1:8080/stats",  key: "play_60a0055a7fdb436d92fab3a943f5c55c", show_rtt: true },
 
       // Node-Media-Server
       // { type: "NMS",     page: "http://localhost:8000/api/streams/live/feed1" },
       // { type: "NMS",     page: "http://admin:admin@localhost:8000/api/streams/live/feed1" },
 
       // nginx-rtmp
-      // { type: "NGINX",   page: "http://localhost/stat",                       key: "live" },
+      // { type: "NGINX",   page: "http://localhost/stat",         key: "live" },
     ];
     // ─────────────────────────────────────────────────────────────────────────────
 
@@ -141,16 +146,17 @@
       } catch { return null; }
     };
 
-    // OpenIRL SRT: same /stats endpoint but the publisher key is the stream id directly
-    const fetchOpenIRL = async ({ page, publisher }) => {
-      const r = await tryFetch(page);
+    // OpenIRL: key is part of the URL → http://host:port/stats/<key>
+    // Response: { publisher: { bitrate, rtt }, status: "ok" }
+    // No signal when publisher is absent or bitrate === 0
+    const fetchOpenIRL = async ({ page, key }) => {
+      const url = `${page.replace(/\/$/, '')}/${key}`;
+      const r = await tryFetch(url);
       if (!r) return null;
       try {
         const d = await r.json();
-        // OpenIRL SLS exposes stats at root or nested — handle both
-        const p = d[publisher] ?? d.publishers?.[publisher];
-        if (!p) return null;
-        return { bitrate: p.bitrate, rtt: p.rtt };
+        if (!d.publisher || !d.publisher.bitrate) return null;
+        return { bitrate: d.publisher.bitrate, rtt: d.publisher.rtt };
       } catch { return null; }
     };
 
@@ -209,8 +215,8 @@
         return;
       }
 
-      const brClass  = colorClass(bitrate, BR_ORANGE, BR_RED, false);
-      const label    = server.show_label ? `<span class="label">${server.type}</span>` : '';
+      const brClass = colorClass(bitrate, BR_ORANGE, BR_RED, false);
+      const label   = server.show_label ? `<span class="label">${server.type}</span>` : '';
 
       let html = `
         <div class="row ${brClass}">
