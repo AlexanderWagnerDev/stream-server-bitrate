@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Build a free OBS bitrate overlay with graphs, indicators, configurable layouts, SRT and RTMP server stats, and a live preview.">
+<title>OBS Bitrate Overlay Builder · Stream Server Bitrate</title>
+<style>
+:root {color-scheme:dark;--bg:#090e19;--panel:#141d2d;--panel2:#192438;--line:#2a3850;--text:#eef4ff;--muted:#a0b4cc;--accent:#70c5fa}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:radial-gradient(ellipse at 75% -15%,#1c3355,transparent 50%),var(--bg);font:14px/1.5 system-ui,'Segoe UI',sans-serif;color:var(--text)}
+a{color:#89cffa}
+header{border-bottom:1px solid var(--line);padding:19px clamp(16px,4vw,40px);display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
+.brand{font-weight:850;font-size:16px;letter-spacing:-.02em}
+.brand small{display:block;font-size:11px;color:var(--muted);font-weight:500}
+nav{display:flex;gap:15px}
+nav a{font-size:12px;text-decoration:none;color:#bbd7ef}
+main{max-width:1590px;margin:auto;padding:24px clamp(14px,2.2vw,35px) 60px}
+h1{margin:4px 0 9px;font-size:clamp(24px,3vw,36px);line-height:1.15;letter-spacing:-.035em}
+.lead{color:var(--muted);margin:0 0 20px;max-width:1000px}
+.layout{display:grid;grid-template-columns:minmax(345px,540px) minmax(360px,1fr);align-items:start;gap:22px}
+.sidebar{display:flex;flex-direction:column;gap:13px;min-width:0}
+fieldset{margin:0;border:1px solid var(--line);background:rgba(20,29,45,.92);border-radius:13px;padding:16px}
+legend{font-size:13px;color:#cbe4ff;font-weight:800;padding:0 8px;letter-spacing:.015em}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+label{display:flex;flex-direction:column;gap:4px;color:var(--muted);font-size:12px;font-weight:650;min-width:0}
+label.full,.full{grid-column:1/-1}
+input,select,textarea,button{font:inherit}
+input:not([type=checkbox]):not([type=color]):not([type=file]),select{background:#0c1424;border:1px solid #40516b;border-radius:7px;padding:9px 10px;color:var(--text);width:100%;min-width:0}
+input[type=color]{width:100%;height:38px;cursor:pointer;background:transparent;border:1px solid #40516b;border-radius:7px}
+input[type=checkbox]{width:15px;height:15px;accent-color:#55bafb}
+.check{display:flex;flex-direction:row;align-items:center;gap:8px;cursor:pointer;color:#cfdef1}
+.row{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.hint{color:#91a8c3;font-size:11px;line-height:1.4;margin:7px 0 0}
+button{border:1px solid #425b7e;background:#223650;color:#e9f5ff;border-radius:8px;padding:8px 12px;font-weight:750;cursor:pointer}
+button:hover{background:#345577}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #70c5fa;outline-offset:2px}
+.primary{background:#1586d0;border-color:#36a5ea;color:#fff}
+.primary:hover{background:#237fba}
+.small{font-size:11px;padding:5px 8px;white-space:nowrap}
+.danger{background:#32212d;border-color:#764958}
+.server{background:var(--panel2);border:1px solid #364764;border-radius:10px;padding:12px;margin:8px 0}
+.server .row{margin-bottom:9px}
+.server strong{color:#e7f6ff;font-size:12px}
+.widget{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:7px 8px;border:1px solid #303f57;border-radius:8px;background:#121c2d;margin:6px 0}
+.widget .check{margin-right:auto}
+.widget-btns{display:flex;gap:4px}
+.widget-btns button{font-size:11px;padding:3px 8px}
+.preview-col{position:sticky;top:16px;min-width:0}
+.preview-card{border:1px solid var(--line);border-radius:15px;background:#141e30;overflow:hidden}
+.preview-head{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;padding:14px 17px;border-bottom:1px solid var(--line)}
+.preview-head strong{font-size:15px}
+.preview-head span{color:var(--muted);font-size:12px}
+.preview-stage{padding:25px 12px;min-height:350px;display:grid;place-items:center;
+ background:linear-gradient(135deg,rgba(11,18,32,.45),rgba(25,48,70,.28)),
+ repeating-conic-gradient(#1f2b3f 0% 25%,#28364b 0% 50%) 50%/28px 28px}
+#preview{border:1px dashed #7d93ad;max-width:100%;background:transparent;display:block}
+.preview-foot{padding:12px 16px;color:var(--muted);font-size:12px}
+.notice{border:1px solid #47617a;border-radius:10px;padding:13px 15px;background:#122438;font-size:12px;color:#c8ddf1;margin-top:12px}
+.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+#feedback{font-size:12px;color:#a9ddb5;margin-top:9px;min-height:18px}
+.code{font:12px/1.5 Consolas,monospace;word-break:break-word;color:#96d5ed}
+@media(max-width:1030px){.layout{grid-template-columns:1fr}.preview-col{position:static;order:-1}.preview-stage{min-height:260px}}
+@media(max-width:530px){.fields{grid-template-columns:1fr}main{padding:16px 12px}.sidebar fieldset{padding:11px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">STREAM SERVER BITRATE <small>OBS Overlay Builder · Free &amp; open source</small></div>
+  <nav><a href="examples/themes.html">Theme gallery</a><a href="README.md">Docs</a><a href="https://github.com/AlexanderWagnerDev/stream-server-bitrate">GitHub</a></nav>
+</header>
+<main>
+<h1>Build your streaming overlay.</h1>
+<p class="lead">Choose the data, widgets, arrangement, graphs and styling. The preview uses synthetic metrics and never contacts your stats servers. Export a <strong>single, ready-to-use HTML file</strong> for the OBS Browser Source.</p>
+<div class="layout">
+<div class="sidebar">
+  <fieldset>
+    <legend>1 · Streaming sources &amp; fallback</legend>
+    <p class="hint">Servers are tried in order. The first server with a valid positive bitrate is used. Private stats keys stay in your browser and downloaded file — never publish that file.</p>
+    <div id="servers"></div>
+    <button id="addServer" type="button">+ Add fallback server</button>
+    <div class="fields" style="margin-top:12px">
+      <label>Polling interval (ms)<input type="number" min="500" max="60000" step="100" data-setting="interval"></label>
+      <label>Request timeout (ms)<input type="number" min="500" max="30000" step="100" data-setting="request_timeout"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>2 · Widgets &amp; display order</legend>
+    <p class="hint">Turn individual metrics on/off and move them up or down. Unavailable statistics are automatically hidden. Graph history stays in browser memory only.</p>
+    <div id="widgets"></div>
+    <div class="fields">
+      <label class="full">Optional overlay title<input data-setting="display.title" maxlength="100" placeholder="My IRL stream"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>3 · Layout &amp; appearance</legend>
+    <div class="fields">
+      <label>Arrangement
+        <select data-setting="design.layout">
+          <option value="vertical">Vertical stack</option><option value="horizontal">Horizontal</option>
+          <option value="compact">Compact row</option><option value="grid">2-column grid</option>
+          <option value="split">Split metrics</option><option value="dashboard">Dashboard</option>
+        </select>
+      </label>
+      <label>Theme
+        <select data-setting="design.preset">
+          <option value="classic">Classic</option><option value="minimal">Minimal</option>
+          <option value="pill">Pill</option><option value="card">Card</option>
+          <option value="glass">Glass</option><option value="neon">Neon</option>
+          <option value="broadcast">Broadcast</option><option value="terminal">Terminal</option>
+          <option value="outline">Outline</option><option value="scoreboard">Scoreboard</option>
+          <option value="gradient">Gradient</option><option value="ticker">Ticker</option>
+        </select>
+      </label>
+      <label>Alignment
+        <select data-setting="design.align"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>
+      </label>
+      <label>Indicator shape
+        <select data-setting="design.indicator_style"><option value="dot">Dot</option><option value="square">Square</option><option value="bar">Bar</option><option value="none">None</option></select>
+      </label>
+      <label>Font family
+        <select data-setting="design.font_family"><option value="'Segoe UI', 'Inter', system-ui, sans-serif">Modern sans-serif</option><option value="Arial, sans-serif">Arial</option><option value="Consolas, monospace">Monospace</option><option value="'Arial Black', sans-serif">Bold display</option></select>
+      </label>
+      <label>Bitrate unit
+        <select data-setting="design.bitrate_unit"><option value="kb/s">kb/s</option><option value="Mb/s">Mb/s</option></select>
+      </label>
+      <label>Number size (px)<input type="number" min="12" max="72" data-setting="design.font_size"></label>
+      <label>Label size (px)<input type="number" min="8" max="24" data-setting="design.label_size"></label>
+      <label>Font weight
+        <select data-setting="design.font_weight"><option value="400">400 Normal</option><option value="600">600 Semibold</option><option value="700">700 Bold</option><option value="800">800 Extra bold</option><option value="900">900 Black</option></select>
+      </label>
+      <label>Spacing (px)<input type="number" min="0" max="48" data-setting="design.gap"></label>
+      <label>Border radius (px)<input type="number" min="0" max="45" data-setting="design.corner_radius"></label>
+      <label>Border width (px)<input type="number" min="0" max="8" data-setting="design.border_width"></label>
+      <label>Indicator size (px)<input type="number" min="2" max="30" data-setting="design.indicator_size"></label>
+      <label>Letter spacing (px)<input type="number" min="-2" max="8" step=".5" data-setting="design.letter_spacing"></label>
+      <label>Accent color<input type="color" data-setting="design.accent_color"></label>
+      <label>Good bitrate / RTT<input type="color" data-setting="design.colors.green"></label>
+      <label>Warning<input type="color" data-setting="design.colors.orange"></label>
+      <label>Danger<input type="color" data-setting="design.colors.red"></label>
+      <label class="full">Background (CSS, supports transparency)<input data-setting="design.background" placeholder="rgba(12, 18, 30, 0.82)"></label>
+      <label class="full">Border color (CSS)<input data-setting="design.border_color"></label>
+      <label class="full">Outer padding (CSS)<input data-setting="design.padding"></label>
+      <label class="full">Per-metric padding (CSS)<input data-setting="design.row_padding"></label>
+      <label class="full">Offline text<input data-setting="design.offline_text" maxlength="75"></label>
+      <label class="check"><input type="checkbox" data-setting="design.show_dot">Show status indicators</label>
+      <label class="check"><input type="checkbox" data-setting="design.show_bitrate_label">Show BITRATE label</label>
+      <label class="check"><input type="checkbox" data-setting="design.text_shadow">Text shadow</label>
+      <label class="check"><input type="checkbox" data-setting="design.show_units">Show units</label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>4 · Graphs, history &amp; bitrate bar</legend>
+    <div class="fields">
+      <label>History samples<input type="number" min="5" max="600" data-setting="display.history_points"></label>
+      <label>Graph width (px)<input type="number" min="120" max="960" data-setting="display.graph_width"></label>
+      <label>Graph height (px)<input type="number" min="50" max="300" data-setting="display.graph_height"></label>
+      <label>Fixed graph maximum<input type="number" min="0" data-setting="display.graph_max"></label>
+      <label>Graph stroke (px)<input type="number" min="1" max="10" step=".5" data-setting="display.graph_line_width"></label>
+      <label>Graph color
+        <select data-setting="display.graph_color"><option value="status">Signal status</option><option value="accent">Theme accent</option></select>
+      </label>
+      <label>Bar maximum (kb/s)<input type="number" min="100" max="100000" data-setting="display.bar_max"></label>
+      <label>Bar height (px)<input type="number" min="3" max="50" data-setting="display.bar_height"></label>
+      <label class="check"><input type="checkbox" data-setting="display.graph_grid">Show graph grid</label>
+      <label class="check"><input type="checkbox" data-setting="display.graph_fill">Fill below graph</label>
+    </div>
+    <p class="hint">At a 2-second polling interval, 60 samples represent approximately 2 minutes. Offline polls create gaps instead of false zero values. Bitrate and RTT can have their own graph.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>5 · Status thresholds &amp; OBS size</legend>
+    <div class="fields">
+      <label>Bitrate warning ≤ (kb/s)<input type="number" min="0" data-setting="thresholds.bitrate_orange"></label>
+      <label>Bitrate red ≤ (kb/s)<input type="number" min="0" data-setting="thresholds.bitrate_red"></label>
+      <label>RTT warning ≥ (ms)<input type="number" min="0" data-setting="thresholds.rtt_orange"></label>
+      <label>RTT red ≥ (ms)<input type="number" min="0" data-setting="thresholds.rtt_red"></label>
+      <label>OBS preview width (px)<input id="viewWidth" type="number" min="220" max="1280" value="480"></label>
+      <label>OBS preview height (px)<input id="viewHeight" type="number" min="130" max="850" value="350"></label>
+    </div>
+  </fieldset>
+</div>
+<div class="preview-col">
+  <section class="preview-card">
+    <div class="preview-head"><strong>Live design preview</strong><span>DEMO DATA · NO NETWORK REQUESTS</span></div>
+    <div class="preview-stage">
+      <iframe id="preview" src="colorBitrate.html?demo=1&amp;srtla=1" title="Live preview of the current overlay settings"></iframe>
+    </div>
+    <div class="preview-foot">The checkerboard imitates transparent OBS content. Metrics, bitrate graphs and SRTLA links are sample values. The exported HTML uses your configured server endpoints.</div>
+  </section>
+  <div class="notice"><strong>Local-only configuration.</strong> The builder never sends your stream keys to the preview iframe, GitHub, or any server. The downloadable HTML embeds your settings and may contain a private stats key. Keep exported files private. OBS must be able to access your server and respect CORS/HTTPS rules.</div>
+  <div class="actions">
+    <button id="download" class="primary" type="button">Download OBS overlay (.html)</button>
+    <button id="exportJson" type="button">Export settings (.json)</button>
+    <button id="importJson" type="button">Import settings (.json)</button>
+    <input id="importFile" type="file" accept=".json,application/json" hidden>
+    <button id="reset" type="button">Reset settings</button>
+  </div>
+  <div id="feedback" role="status" aria-live="polite"></div>
+  <p class="hint">Once downloaded, in OBS add a Browser Source → Local file → select the generated HTML. The width and height above are a preview guide; apply those dimensions in OBS too. A static GitHub Pages build is available after the PR is merged and Pages is enabled in repository settings.</p>
+</div>
+</div>
+</main>
+<script>
+"use strict";
+// No service calls, tracking, cookies, or localStorage. This form holds keys in memory only.
+const defaults = {
+  interval: 2000, request_timeout: 4000,
+  servers: [{
+    type: "OpenRTMP", page: "https://example.invalid/stats", key: "", publisher: "",
+    show_rtt: true, show_label: true, label: "OpenRTMP",
+    show_throughput: false, peer_display: "off", max_peers: 4,
+  }],
+  design: {
+    preset: "glass", layout: "dashboard", align: "left",
+    font_family: "'Segoe UI', 'Inter', system-ui, sans-serif",
+    font_size: 22, label_size: 11, font_weight: 700, gap: 8,
+    padding: "8px 10px", row_padding: "6px 12px", corner_radius: 13,
+    border_width: 1, indicator_size: 8, indicator_style: "dot",
+    letter_spacing: 0, accent_color: "#38bdf8",
+    background: "rgba(12, 18, 30, 0.82)", border_color: "rgba(255, 255, 255, 0.15)",
+    text_shadow: true, show_dot: true, show_bitrate_label: true,
+    show_units: true, bitrate_unit: "kb/s", mbps_decimals: 2,
+    offline_text: "NO SIGNAL",
+    colors: { green: "#4ade80", orange: "#fb923c", red: "#f87171",
+      muted: "rgba(255, 255, 255, 0.65)" },
+  },
+  thresholds: {bitrate_orange: 2500, bitrate_red: 1200, rtt_orange: 120, rtt_red: 250},
+  display: {
+    bitrate: true, rtt: true, throughput: false, peers: true, uptime: true,
+    status: true, graph: true, rtt_graph: false, bitrate_bar: true,
+    title: "STREAM HEALTH",
+    history_points: 60, graph_width: 390, graph_height: 108,
+    graph_max: 0, graph_line_width: 2, graph_color: "accent",
+    graph_fill: true, graph_grid: true, bar_max: 6000, bar_height: 10,
+    order: ["status", "bitrate", "rtt", "bitrate_bar", "graph",
+      "rtt_graph", "throughput", "uptime", "peers"],
+  },
+};
+let state = structuredClone(defaults);
+const allowedWidgets = {
+  status: "Connection status",
+  bitrate: "Current bitrate",
+  rtt: "Round trip time (RTT)",
+  bitrate_bar: "Bitrate level bar",
+  graph: "Bitrate history graph",
+  rtt_graph: "RTT history graph",
+  throughput: "Network throughput",
+  uptime: "Streaming uptime",
+  peers: "SRTLA connection details",
+};
+const $ = id => document.getElementById(id);
+const htmlEscape = value => String(value ?? "").replace(/[&<>"']/g, c => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+})[c]);
+const getField = path => path.split(".").reduce((p, k) => p?.[k], state);
+const setField = (path, value) => {
+  const keys = path.split(".");
+  let obj = state;
+  for (const k of keys.slice(0, -1)) obj = obj[k];
+  const key = keys.at(-1);
+  // All data-setting attributes below are static trusted markup.
+  const old = obj[key];
+  obj[key] = typeof old === "number" ? Number(value) :
+    typeof old === "boolean" ? !!value : String(value);
+};
+const serverFields = [
+  ["OpenRTMP", "OpenRTMP /stats?key="],
+  ["OpenIRL", "OpenIRL SLS (SRT / SRTLA)"],
+  ["SRT", "Traditional SRT-Live-Server"],
+  ["NMS", "Node-Media-Server"],
+  ["NGINX", "nginx-rtmp"],
+];
+function renderServers() {
+  $("servers").replaceChildren();
+  state.servers.forEach((server, index) => {
+    const div = document.createElement("div");
+    div.className = "server";
+    const opts = serverFields.map(([value, title]) =>
+      '<option value="' + value + '"' + (server.type === value ? " selected" : "") +
+      '>' + htmlEscape(title) + '</option>').join("");
+    div.innerHTML = '<div class="row"><strong>Source ' + (index + 1) + '</strong>' +
+      '<div><button class="small" data-move="-1" data-index="' + index + '" type="button">↑</button> ' +
+      '<button class="small" data-move="1" data-index="' + index + '" type="button">↓</button> ' +
+      '<button class="small danger" data-remove data-index="' + index + '" type="button">Remove</button></div></div>' +
+      '<div class="fields"><label class="full">Server type<select data-server="' + index + '" data-key="type">' + opts +
+      '</select></label>' +
+      '<label class="full">Stats URL<input data-server="' + index + '" data-key="page" placeholder="https://server.example/stats" value="' + htmlEscape(server.page) + '"></label>' +
+      (server.type === "SRT" ?
+        '<label class="full">Publisher path<input data-server="' + index + '" data-key="publisher" value="' +
+          htmlEscape(server.publisher) + '"></label>' :
+        server.type === "NMS" ? '' :
+        '<label class="full">' +
+          (server.type === "OpenIRL" ? "Player ID" : server.type === "OpenRTMP" ? "Stats key (not API token)" : "Application tag") +
+          '<input data-server="' + index + '" data-key="key" value="' + htmlEscape(server.key) +
+          '" placeholder="' + (server.type === "OpenRTMP" ? "sts_..." : "") + '"></label>') +
+      '<label class="full">Label<input data-server="' + index + '" data-key="label" value="' + htmlEscape(server.label) +
+      '"></label>' +
+      '<label class="check"><input type="checkbox" data-server="' + index + '" data-key="show_rtt"' +
+       (server.show_rtt ? " checked" : "") + '>Show RTT</label>' +
+      '<label class="check"><input type="checkbox" data-server="' + index + '" data-key="show_label"' +
+       (server.show_label ? " checked" : "") + '>Show label</label>' +
+      (server.type === "OpenIRL" ?
+      '<label class="check"><input type="checkbox" data-server="' + index + '" data-key="show_throughput"' +
+        (server.show_throughput ? " checked" : "") + '>Show throughput</label>' +
+      '<label>SRTLA peer info<select data-server="' + index + '" data-key="peer_display">' +
+        ["off","count","details"].map(v=>'<option value="'+v+'"'+(server.peer_display===v?' selected':'')+'>'+v+'</option>').join("") +
+        '</select></label>' +
+      '<label>Maximum links<input type="number" min="1" max="16" data-server="' + index +
+        '" data-key="max_peers" value="' + htmlEscape(server.max_peers) + '"></label>' : '') +
+      '</div>';
+    $("servers").appendChild(div);
+  });
+}
+function renderWidgets() {
+  $("widgets").replaceChildren();
+  for (const name of state.display.order) {
+    if (!Object.hasOwn(allowedWidgets, name)) continue;
+    const div = document.createElement("div");
+    div.className = "widget";
+    div.innerHTML = '<label class="check"><input type="checkbox" data-widget="' + name + '"' +
+      (state.display[name] ? ' checked' : '') + '>' + htmlEscape(allowedWidgets[name]) + '</label>' +
+      '<div class="widget-btns"><button type="button" data-widget-move="' + name +
+      '" data-step="-1" title="Move up">↑</button><button type="button" data-widget-move="' +
+      name + '" data-step="1" title="Move down">↓</button></div>';
+    $("widgets").appendChild(div);
+  }
+}
+function renderControls() {
+  for (const control of document.querySelectorAll("[data-setting]")) {
+    const value = getField(control.dataset.setting);
+    if (control.type === "checkbox") control.checked = !!value;
+    else control.value = String(value ?? "");
+  }
+  renderServers();
+  renderWidgets();
+  syncPreview();
+}
+function syncPreview() {
+  const iframe = $("preview");
+  const w = Math.max(220, Math.min(1280, Number($("viewWidth").value) || 480));
+  const h = Math.max(130, Math.min(850, Number($("viewHeight").value) || 350));
+  iframe.style.width = w + "px";
+  iframe.style.height = h + "px";
+  if (!iframe.contentWindow) return;
+  // Never send server URLs or keys to a preview; the demo uses synthetic data only.
+  const settings = {design: state.design, display: state.display, thresholds: state.thresholds};
+  iframe.contentWindow.postMessage({type:"bitrate-overlay-preview", settings},
+    window.location.origin === "null" ? "*" : window.location.origin);
+}
+$("preview").addEventListener("load", syncPreview);
+document.addEventListener("input", event => {
+  const target = event.target;
+  if (target.matches("[data-setting]")) {
+    setField(target.dataset.setting, target.type === "checkbox" ? target.checked : target.value);
+    syncPreview();
+  } else if (target.id === "viewWidth" || target.id === "viewHeight") syncPreview();
+});
+document.addEventListener("change", event => {
+  const target = event.target;
+  if (target.matches("[data-server]")) {
+    const i = Number(target.dataset.server);
+    const key = target.dataset.key;
+    const old = state.servers[i][key];
+    state.servers[i][key] = typeof old === "boolean" ? target.checked :
+      typeof old === "number" ? Number(target.value) : target.value;
+    if (key === "type") {
+      state.servers[i].label = target.value;
+      renderServers();
+    }
+    syncPreview();
+  }
+  if (target.matches("[data-widget]")) {
+    state.display[target.dataset.widget] = target.checked;
+    syncPreview();
+  }
+});
+document.addEventListener("click", event => {
+  const btn = event.target.closest("button");
+  if (!btn) return;
+  if (btn.hasAttribute("data-remove")) {
+    if (state.servers.length > 1) state.servers.splice(Number(btn.dataset.index), 1);
+    else state.servers = [];
+    renderServers();
+  } else if (btn.hasAttribute("data-move")) {
+    const i = Number(btn.dataset.index), j = i + Number(btn.dataset.move);
+    if (j >= 0 && j < state.servers.length) {
+      [state.servers[i], state.servers[j]] = [state.servers[j], state.servers[i]];
+      renderServers();
+    }
+  } else if (btn.hasAttribute("data-widget-move")) {
+    const key = btn.dataset.widgetMove;
+    const i = state.display.order.indexOf(key), j = i + Number(btn.dataset.step);
+    if (i >= 0 && j >= 0 && j < state.display.order.length) {
+      [state.display.order[i], state.display.order[j]] =
+        [state.display.order[j], state.display.order[i]];
+      renderWidgets();
+      syncPreview();
+    }
+  }
+});
+$("addServer").addEventListener("click", () => {
+  if (state.servers.length >= 20) return;
+  state.servers.push({
+    type:"OpenIRL",page:"",key:"",publisher:"",show_rtt:true,show_label:true,
+    label:"OpenIRL",show_throughput:false,peer_display:"off",max_peers:4,
+  });
+  renderServers();
+});
+const report = message => { $("feedback").textContent = message; };
+function download(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a);
+  a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function downloadJson() {
+  download(new Blob([JSON.stringify(state,null,2)], {type:"application/json"}),
+    "bitrate-overlay-settings.json");
+  report("Settings exported. Keep the JSON private if it contains stats keys.");
+}
+$("exportJson").addEventListener("click", downloadJson);
+$("download").addEventListener("click", async () => {
+  try {
+    const response = await fetch("./colorBitrate.html", {cache:"no-store"});
+    if (!response.ok) throw new Error("Could not load overlay template");
+    const html = await response.text();
+    const marker = "const EMBEDDED_SETTINGS = null; // GENERATED_OVERLAY_SETTINGS";
+    if (!html.includes(marker)) throw new Error("Overlay template version does not support export");
+    if (state.servers.length === 0 || state.servers.some(s => !s.page.trim())) {
+      report("Add at least one stats server with a URL before exporting.");
+      return;
+    }
+    const json = JSON.stringify(state).replace(/</g, "\\u003c")
+      .replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+    const exported = html.replace(marker,
+      "const EMBEDDED_SETTINGS = " + json + "; // GENERATED_OVERLAY_SETTINGS");
+    download(new Blob([exported], {type:"text/html;charset=utf-8"}), "stream-bitrate-obs.html");
+    report("Overlay downloaded. Set the matching width/height in OBS. Keep stats keys private.");
+  } catch (error) {
+    report("Export failed: " + error.message +
+      ". Use the GitHub Pages builder or serve the repository locally (python3 -m http.server).");
+  }
+});
+$("importJson").addEventListener("click", () => $("importFile").click());
+$("importFile").addEventListener("change", async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    if (file.size > 200000) throw new Error("Settings file too large");
+    const cfg = JSON.parse(await file.text());
+    if (!cfg || typeof cfg !== "object" || !Array.isArray(cfg.servers)) throw new Error("Invalid settings file");
+    // Copy only recognized fields from JSON imports (no prototype pollution).
+    const safe = structuredClone(defaults);
+    const copyFields = (target, source) => {
+      for (const key of Object.keys(target)) {
+        if (!Object.hasOwn(source || {}, key)) continue;
+        if (typeof target[key] === "number" && Number.isFinite(Number(source[key]))) target[key] = Number(source[key]);
+        else if (typeof target[key] === "boolean" && typeof source[key] === "boolean") target[key] = source[key];
+        else if (typeof target[key] === "string" && typeof source[key] === "string") target[key] = source[key].slice(0, 500);
+      }
+    };
+    copyFields(safe, cfg);
+    copyFields(safe.design, cfg.design);
+    copyFields(safe.design.colors, cfg.design?.colors);
+    copyFields(safe.thresholds, cfg.thresholds);
+    copyFields(safe.display, cfg.display);
+    if (Array.isArray(cfg.display?.order)) {
+      safe.display.order = [...new Set(cfg.display.order.filter(k => Object.hasOwn(allowedWidgets, k)))];
+      for (const k of Object.keys(allowedWidgets)) if (!safe.display.order.includes(k)) safe.display.order.push(k);
+    }
+    safe.servers = cfg.servers.slice(0,20).map(src => {
+      const dest = structuredClone(defaults.servers[0]);
+      copyFields(dest, src);
+      if (!serverFields.some(([name]) => name === dest.type)) dest.type = "OpenRTMP";
+      return dest;
+    });
+    state = safe;
+    renderControls();
+    report("Settings imported. Preview updated.");
+  } catch (error) { report("Import failed: " + error.message); }
+  event.target.value = "";
+});
+$("reset").addEventListener("click", () => {
+  state = structuredClone(defaults);
+  renderControls();
+  report("Defaults restored.");
+});
+renderControls();
+</script>
+</body>
+</html>
