@@ -171,7 +171,7 @@ test('all 12 theme presets render demo stats without a network request', () => {
   for (const preset of names) {
     const h = createHarness('http://localhost/overlay.html?demo=1&preset=' + preset);
     assert.match(h.overlay.className, new RegExp('preset-' + preset));
-    assert.equal(h.overlay.children.length, 2, preset + ' displays bitrate and RTT');
+    assert.equal(h.overlay.children.length, 3, preset + ' displays bitrate, RTT and network throughput');
     assert.ok(h.overlay.children[0].children.some(
       (node) => node.textContent.includes('3480 kb/s'),
     ));
@@ -187,7 +187,7 @@ test('interactive demo options apply indicators, orientation, and two SRTLA link
   assert.match(h.overlay.className, /preset-glass/);
   assert.match(h.overlay.className, /layout-horizontal/);
   assert.match(h.overlay.className, /indicator-bar/);
-  assert.equal(h.overlay.children.length, 5); // bitrate + RTT + count + two peers
+  assert.equal(h.overlay.children.length, 6); // bitrate + RTT + throughput + count + two peers
   assert.deepEqual(h.urls, []);
 });
 
