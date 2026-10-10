@@ -26,7 +26,7 @@
     .heading h2{font-size:16px;margin:0;letter-spacing:-.01em}
     .heading .type{font-size:10px;color:#91aacc;text-transform:uppercase;letter-spacing:.12em}
     .desc{color:var(--muted);font-size:12px;min-height:35px;margin:0;padding:0 18px 10px}
-    .stage{height:160px;margin:0 14px 14px;position:relative;border-radius:10px;overflow:hidden;
+    .stage{height:190px;margin:0 14px 14px;position:relative;border-radius:10px;overflow:hidden;
       background-image:linear-gradient(145deg,rgba(11,18,31,.62),rgba(31,50,77,.25)),
       linear-gradient(45deg,#25344b 25%,transparent 25%),
       linear-gradient(-45deg,#25344b 25%,transparent 25%),
@@ -42,7 +42,7 @@
     button:hover,.actions a:hover{background:#294768}
     .footer{margin-top:25px;color:var(--muted);font-size:13px}
     .footer a{color:var(--accent)}
-    @media(max-width:760px){.grid{grid-template-columns:1fr}main{padding:28px 14px 64px}.toolbar .note{margin-left:0}.stage{height:150px}}
+    @media(max-width:760px){.grid{grid-template-columns:1fr}main{padding:28px 14px 64px}.toolbar .note{margin-left:0}.stage{min-height:180px}}
   </style>
 </head>
 <body>
@@ -149,7 +149,10 @@
       srtla: document.getElementById("srtla").value,
     });
     document.getElementById("sizeLabel").textContent = params.get("fontSize") + "px";
+    const showPeers = document.getElementById("srtla").value === "1";
+    const largeText = Number(document.getElementById("fontSize").value) > 28;
     for (const frame of document.querySelectorAll("iframe[data-preset]")) {
+      frame.parentElement.style.height = (showPeers ? (largeText ? 340 : 270) : 190) + "px";
       const u = new URL("../bitrate.html", window.location.href);
       u.search = params.toString();
       u.searchParams.set("preset", frame.dataset.preset);
