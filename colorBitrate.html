@@ -2,49 +2,65 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Stream Bitrate Overlay</title>
   <style>
     :root {
-      --color-green:  #4ade80;
+      --color-green: #4ade80;
       --color-orange: #fb923c;
-      --color-red:    #f87171;
-      --color-muted:  rgba(255,255,255,0.35);
+      --color-red: #f87171;
+      --color-muted: rgba(255, 255, 255, 0.65);
       --font: 'Segoe UI', 'Inter', system-ui, sans-serif;
+      --font-size: 22px;
+      --label-size: 11px;
+      --font-weight: 700;
+      --gap: 6px;
+      --radius: 12px;
+      --surface: rgba(12, 18, 30, 0.82);
+      --border: rgba(255, 255, 255, 0.15);
+      --shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
     }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
       background: transparent;
       font-family: var(--font);
       overflow: hidden;
-      padding: 6px 10px;
+      display: flex;
+      align-items: flex-end;
+      min-height: 100vh;
+    }
+    #overlay {
       display: flex;
       flex-direction: column;
       align-items: flex-end;
-      gap: 2px;
+      gap: var(--gap);
+      width: max-content;
+      max-width: 100%;
     }
-
+    #overlay.layout-horizontal {
+      flex-direction: row;
+      align-items: center;
+      flex-wrap: wrap;
+    }
     .row {
       display: flex;
       align-items: center;
       gap: 5px;
-      font-size: 22px;
-      font-weight: 700;
-      text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+      font-size: var(--font-size);
+      font-weight: var(--font-weight);
       line-height: 1.2;
+      white-space: nowrap;
+      text-shadow: var(--shadow);
     }
-
-    .row .label {
-      font-size: 11px;
+    .label {
+      font-size: var(--label-size);
       font-weight: 600;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--color-muted);
-      text-shadow: 0 1px 3px rgba(0,0,0,0.8);
     }
-
-    .row .dot {
+    .dot {
+      display: inline-block;
       width: 8px;
       height: 8px;
       border-radius: 50%;
@@ -52,196 +68,306 @@
       opacity: 0.85;
       flex-shrink: 0;
     }
-
-    .no-signal {
-      color: var(--color-red);
-      font-size: 20px;
-      font-weight: 700;
-      text-shadow: 0 1px 4px rgba(0,0,0,0.7);
-    }
-
-    .green  { color: var(--color-green); }
+    .green { color: var(--color-green); }
     .orange { color: var(--color-orange); }
-    .red    { color: var(--color-red); }
+    .red { color: var(--color-red); }
+    .no-signal { color: var(--color-red); }
+
+    /* Presets are purely visual; all data sources use the same renderer. */
+    #overlay.preset-pill .row {
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    #overlay.preset-card {
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    #overlay.preset-minimal .dot { display: none; }
+    #overlay.preset-minimal .row { gap: 4px; }
   </style>
 </head>
 <body>
-  <div id="overlay"></div>
+  <div id="overlay" role="status" aria-live="off"></div>
 
   <script>
-    // ─── Configuration ───────────────────────────────────────────────────────────
-    //
-    // interval: polling interval in milliseconds
-    //
-    // servers: array of server definitions — the overlay tries each in order and
-    //          uses the first one that returns valid data.
-    //
-    // Server types:
-    //   "SRT"     — SRT-Live-Server stats JSON  (e.g. SLS /stats)
-    //               Required fields: page, publisher
-    //               publisher = the stream key path, e.g. "publish/live/mykey"
-    //               Response structure: { publishers: { "publish/live/mykey": { bitrate, rtt } } }
-    //
-    //   "OpenIRL" — OpenIRL SRT server stats
-    //               Required fields: page, key
-    //               page = base URL, e.g. "http://host:8080/stats"
-    //               key  = stream key appended to URL, e.g. "play_60a0055a7fdb436d92fab3a943f5c55c"
-    //               Full URL becomes: http://host:8080/stats/play_60a0055a7fdb436d92fab3a943f5c55c
-    //               Response structure: { publisher: { bitrate, rtt }, status: "ok" }
-    //               No signal when publisher is missing or bitrate === 0
-    //
-    //   "NMS"     — Node-Media-Server REST API
-    //               Required fields: page
-    //               Optional: credentials via URL, e.g. "http://admin:pass@host:8000/api/streams/live/feed1"
-    //
-    //   "NGINX"   — nginx-rtmp-module /stat XML endpoint
-    //               Required fields: page, key  (the XML tag to parse, usually "live")
-    //
-    // show_rtt:   (optional) show RTT row below bitrate — only for SRT and OpenIRL
-    // show_label: (optional) show a small server-type badge next to the value
-    //
-    const interval = 2000;
+    // ─── Server configuration ──────────────────────────────────────────────────
+    // First server returning a positive bitrate wins. Others are fallbacks.
+    const interval = 2000;        // Milliseconds between completed polls
+    const request_timeout = 4000; // Milliseconds per endpoint
 
     const servers = [
-      // SRT-Live-Server (SLS)
-      { type: "SRT",     page: "http://127.0.0.1:8181/stats",    publisher: "publish/live/test", show_rtt: true },
+      // SRT-Live-Server /stats (publisher stream path)
+      { type: "SRT", page: "http://127.0.0.1:8181/stats", publisher: "publish/live/test", show_rtt: true },
 
-      // OpenIRL SRT server — key is appended to the page URL
-      // { type: "OpenIRL", page: "http://127.0.0.1:8080/stats", key: "play_60a0055a7fdb436d92fab3a943f5c55c", show_rtt: true },
+      // OpenIRL SLS stats page: page is /stats, key is the PLAYER ID.
+      // You can alternatively put /stats/<player_id> in page and omit key.
+      // { type: "OpenIRL", page: "http://127.0.0.1:8080/stats", key: "live", show_rtt: true, show_label: true },
+
+      // OpenRTMP librtmp2-server: PUBLIC stats_key, NOT an API bearer token.
+      // Also accepts a full page URL with ?key=... and no separate key field.
+      // { type: "OpenRTMP", page: "http://127.0.0.1:8080/stats", key: "sts_your_stats_key", show_rtt: true, show_label: true },
 
       // Node-Media-Server
-      // { type: "NMS",     page: "http://localhost:8000/api/streams/live/feed1" },
-      // { type: "NMS",     page: "http://admin:admin@localhost:8000/api/streams/live/feed1" },
+      // { type: "NMS", page: "http://localhost:8000/api/streams/live/feed1" },
 
-      // nginx-rtmp
-      // { type: "NGINX",   page: "http://localhost/stat",        key: "live" },
+      // nginx-rtmp /stat XML
+      // { type: "NGINX", page: "http://localhost/stat", key: "live" },
     ];
-    // ─────────────────────────────────────────────────────────────────────────────
 
-    // Bitrate thresholds (kbps)
-    const BR_ORANGE = 2500;
-    const BR_RED    = 1200;
+    // ─── Appearance ────────────────────────────────────────────────────────────
+    // Edit these values to change the overlay in OBS; no build step is needed.
+    const design = {
+      preset: "classic",            // "classic", "pill", "card", "minimal"
+      layout: "vertical",           // "vertical" or "horizontal"
+      align: "right",               // "left", "center", "right"
+      font_family: "'Segoe UI', 'Inter', system-ui, sans-serif",
+      font_size: 22,                // Value size in px
+      label_size: 11,               // Label size in px
+      font_weight: 700,
+      gap: 4,                       // Spacing between rows in px
+      padding: "6px 10px",          // Outer OBS overlay padding
+      corner_radius: 12,           // Pill/card corner radius in px
+      background: "rgba(12, 18, 30, 0.82)",
+      border_color: "rgba(255, 255, 255, 0.15)",
+      text_shadow: true,
+      show_dot: true,               // Minimal preset hides dots regardless
+      show_bitrate_label: false,
+      show_units: true,
+      bitrate_unit: "kb/s",         // "kb/s" or "Mb/s"; colors always use kb/s
+      mbps_decimals: 2,
+      offline_text: "NO SIGNAL",
+      colors: {
+        green: "#4ade80",
+        orange: "#fb923c",
+        red: "#f87171",
+        muted: "rgba(255, 255, 255, 0.65)",
+      },
+    };
 
-    // RTT thresholds (ms)
-    const RTT_ORANGE = 120;
-    const RTT_RED    = 250;
+    // Thresholds stay in kb/s and ms, regardless of the display unit.
+    const thresholds = {
+      bitrate_orange: 2500, // <= 2500 kb/s => orange
+      bitrate_red: 1200,    // <= 1200 kb/s => red
+      rtt_orange: 120,      // >= 120 ms => orange
+      rtt_red: 250,         // >= 250 ms => red
+    };
+    // ──────────────────────────────────────────────────────────────────────────
 
-    const colorClass = (val, orangeThreshold, redThreshold, higherIsBad) =>
-      higherIsBad
-        ? (val >= redThreshold ? 'red' : val >= orangeThreshold ? 'orange' : 'green')
-        : (val <= redThreshold ? 'red' : val <= orangeThreshold ? 'orange' : 'green');
+    const numeric = (value) => {
+      if (value === null || value === undefined || value === "") return null;
+      const number = Number(value);
+      return Number.isFinite(number) ? number : null;
+    };
+
+    const normalized = (bitrate, rtt) => {
+      const kbps = numeric(bitrate);
+      if (kbps === null || kbps <= 0) return null;
+      const delay = numeric(rtt);
+      return { bitrate: kbps, rtt: delay !== null && delay >= 0 ? delay : null };
+    };
 
     const tryFetch = async (url) => {
-      try { return await fetch(url); } catch { return null; }
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), Math.max(250, request_timeout));
+      try {
+        const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
+        return response.ok ? response : null;
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timeout);
+      }
     };
 
     const fetchSRT = async ({ page, publisher }) => {
-      const r = await tryFetch(page);
-      if (!r) return null;
+      const response = await tryFetch(page);
+      if (!response) return null;
       try {
-        const d = await r.json();
-        const p = d.publishers?.[publisher];
-        if (!p) return null;
-        return { bitrate: p.bitrate, rtt: p.rtt };
-      } catch { return null; }
+        const data = await response.json();
+        const publisherData = data.publishers?.[publisher];
+        return publisherData ? normalized(publisherData.bitrate, publisherData.rtt) : null;
+      } catch {
+        return null;
+      }
     };
 
-    // OpenIRL: key is part of the URL → http://host:port/stats/<key>
-    // Response: { publisher: { bitrate, rtt }, status: "ok" }
-    // No signal when publisher is absent or bitrate === 0
-    const fetchOpenIRL = async ({ page, key }) => {
-      const url = `${page.replace(/\/$/, '')}/${key}`;
-      const r = await tryFetch(url);
-      if (!r) return null;
+    const openIRLUrl = ({ page, key }) => {
+      const url = new URL(page, window.location.href);
+      if (key) url.pathname = url.pathname.replace(/\/+$/, "") + "/" + encodeURIComponent(key);
+      return url.toString();
+    };
+
+    const fetchOpenIRL = async (server) => {
       try {
-        const d = await r.json();
-        if (!d.publisher || !d.publisher.bitrate) return null;
-        return { bitrate: d.publisher.bitrate, rtt: d.publisher.rtt };
-      } catch { return null; }
+        const response = await tryFetch(openIRLUrl(server));
+        if (!response) return null;
+        const data = await response.json();
+        return data.publisher ? normalized(data.publisher.bitrate, data.publisher.rtt) : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const openRTMPUrl = ({ page, key }) => {
+      const url = new URL(page, window.location.href);
+      if (key) url.searchParams.set("key", key);
+      return url.toString();
+    };
+
+    const fetchOpenRTMP = async (server) => {
+      try {
+        const response = await tryFetch(openRTMPUrl(server));
+        if (!response) return null;
+        // The current /stats endpoint returns a flat, per-stream public object.
+        // Older /stats responses contain a streams array; support both.
+        const data = await response.json();
+        const stats = Array.isArray(data.streams) ? data.streams[0] : data;
+        return stats ? normalized(stats.bitrate_kbps, stats.rtt_ms) : null;
+      } catch {
+        // OpenRTMP responds with "Stream offline" as plain text when offline.
+        return null;
+      }
     };
 
     const fetchNMS = async ({ page }) => {
-      const r = await tryFetch(page);
-      if (!r) return null;
+      const response = await tryFetch(page);
+      if (!response) return null;
       try {
-        const d = await r.json();
-        if (!d.bitrate) return null;
-        return { bitrate: d.bitrate };
-      } catch { return null; }
+        const data = await response.json();
+        return normalized(data.bitrate, null);
+      } catch {
+        return null;
+      }
     };
 
     const fetchNGINX = async ({ page, key }) => {
-      const r = await tryFetch(page);
-      if (!r) return null;
+      const response = await tryFetch(page);
+      if (!response) return null;
       try {
-        const xml  = await r.text();
-        const doc  = new DOMParser().parseFromString(xml, 'text/xml');
-        const live = doc.getElementsByTagName(key)[0];
-        const node = live?.childNodes?.[1]?.childNodes?.[14];
-        if (!node) return null;
-        const bitrate = Math.round(node.childNodes[0].nodeValue / 1024);
-        return { bitrate };
-      } catch { return null; }
+        const xml = await response.text();
+        const doc = new DOMParser().parseFromString(xml, "text/xml");
+        if (doc.getElementsByTagName("parsererror").length) return null;
+        const app = doc.getElementsByTagName(key)[0];
+        if (!app) return null;
+        const streams = app.getElementsByTagName("stream");
+        for (const stream of streams) {
+          if (!stream.getElementsByTagName("publishing").length) continue;
+          const node = stream.getElementsByTagName("bw_in")[0];
+          if (node) return normalized(numeric(node.textContent) / 1000, null);
+        }
+        return null;
+      } catch {
+        return null;
+      }
     };
 
     const fetchers = {
-      SRT:     fetchSRT,
+      SRT: fetchSRT,
       OpenIRL: fetchOpenIRL,
-      NMS:     fetchNMS,
-      NGINX:   fetchNGINX,
+      OpenRTMP: fetchOpenRTMP,
+      NMS: fetchNMS,
+      NGINX: fetchNGINX,
     };
 
     const getBitrate = async () => {
-      for (const srv of servers) {
-        const result = await fetchers[srv.type]?.(srv);
-        if (result) return { data: result, server: srv };
+      for (const server of servers) {
+        const fetcher = fetchers[server.type];
+        if (!fetcher) continue;
+        const data = await fetcher(server);
+        if (data) return { data, server };
       }
       return null;
     };
 
-    const render = (result) => {
-      const el = document.getElementById('overlay');
-
-      if (!result) {
-        el.innerHTML = `<div class="no-signal">NO SIGNAL</div>`;
-        return;
-      }
-
-      const { data, server } = result;
-      const { bitrate, rtt } = data;
-
-      if (!bitrate) {
-        el.innerHTML = `<div class="no-signal">NO SIGNAL</div>`;
-        return;
-      }
-
-      const brClass = colorClass(bitrate, BR_ORANGE, BR_RED, false);
-      const label   = server.show_label ? `<span class="label">${server.type}</span>` : '';
-
-      let html = `
-        <div class="row ${brClass}">
-          ${label}
-          <span class="dot"></span>
-          ${bitrate} kb/s
-        </div>`;
-
-      if (rtt != null && server.show_rtt) {
-        const rttClass = colorClass(rtt, RTT_ORANGE, RTT_RED, true);
-        html += `
-        <div class="row ${rttClass}">
-          <span class="label">RTT</span>
-          <span class="dot"></span>
-          ${Math.round(rtt)} ms
-        </div>`;
-      }
-
-      el.innerHTML = html;
+    const statusColor = (value, orange, red, higherIsBad) => {
+      if (higherIsBad) return value >= red ? "red" : value >= orange ? "orange" : "green";
+      return value <= red ? "red" : value <= orange ? "orange" : "green";
     };
 
-    const tick = async () => render(await getBitrate());
+    const applyDesign = () => {
+      const root = document.documentElement.style;
+      const css = (name, value) => root.setProperty(name, String(value));
+      css("--color-green", design.colors.green);
+      css("--color-orange", design.colors.orange);
+      css("--color-red", design.colors.red);
+      css("--color-muted", design.colors.muted);
+      css("--font", design.font_family);
+      css("--font-size", design.font_size + "px");
+      css("--label-size", design.label_size + "px");
+      css("--font-weight", design.font_weight);
+      css("--gap", design.gap + "px");
+      css("--radius", design.corner_radius + "px");
+      css("--surface", design.background);
+      css("--border", design.border_color);
+      css("--shadow", design.text_shadow ? "0 1px 4px rgba(0, 0, 0, 0.7)" : "none");
+      document.body.style.padding = design.padding;
+      const alignments = { left: "flex-start", center: "center", right: "flex-end" };
+      document.body.style.alignItems = alignments[design.align] || "flex-end";
+      const overlay = document.getElementById("overlay");
+      const presets = ["classic", "pill", "card", "minimal"];
+      overlay.className = "preset-" + (presets.includes(design.preset) ? design.preset : "classic") +
+        " layout-" + (design.layout === "horizontal" ? "horizontal" : "vertical");
+      overlay.style.alignItems = alignments[design.align] || "flex-end";
+    };
 
+    const span = (className, value) => {
+      const el = document.createElement("span");
+      el.className = className;
+      el.textContent = value;
+      return el;
+    };
+
+    const makeRow = (value, color, label) => {
+      const row = document.createElement("div");
+      row.className = "row " + color;
+      if (label) row.appendChild(span("label", label));
+      if (design.show_dot) row.appendChild(span("dot", ""));
+      row.appendChild(span("value", value));
+      return row;
+    };
+
+    const displayBitrate = (kbps) => {
+      const isMbps = design.bitrate_unit === "Mb/s";
+      const amount = isMbps ? (kbps / 1000).toFixed(Math.max(0, Math.min(5, design.mbps_decimals))) : Math.round(kbps);
+      if (!design.show_units) return String(amount);
+      return amount + (isMbps ? " Mb/s" : " kb/s");
+    };
+
+    const render = (result) => {
+      const overlay = document.getElementById("overlay");
+      if (!result) {
+        overlay.replaceChildren(makeRow(design.offline_text, "no-signal red", null));
+        return;
+      }
+      const { data, server } = result;
+      const brColor = statusColor(data.bitrate, thresholds.bitrate_orange, thresholds.bitrate_red, false);
+      const brLabel = server.show_label ? server.label || server.type :
+        design.show_bitrate_label ? "BITRATE" : null;
+      const rows = [makeRow(displayBitrate(data.bitrate), brColor, brLabel)];
+      if (server.show_rtt && data.rtt !== null) {
+        const rttColor = statusColor(data.rtt, thresholds.rtt_orange, thresholds.rtt_red, true);
+        const rttValue = Math.round(data.rtt) + (design.show_units ? " ms" : "");
+        rows.push(makeRow(rttValue, rttColor, "RTT"));
+      }
+      overlay.replaceChildren(...rows);
+    };
+
+    // Sequential polling avoids overlapping requests during server outages.
+    const tick = async () => {
+      try {
+        render(await getBitrate());
+      } catch {
+        render(null);
+      } finally {
+        setTimeout(tick, Math.max(250, interval));
+      }
+    };
+    applyDesign();
     tick();
-    setInterval(tick, interval);
   </script>
 </body>
 </html>
