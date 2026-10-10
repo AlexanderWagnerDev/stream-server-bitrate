@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Overlay layout audit</title></head>
+<body>
+<output id="audit-result" aria-live="off">RUNNING</output>
+<script type="module">
+"use strict";
+const presets = ["classic", "minimal", "pill", "card", "glass", "neon",
+  "broadcast", "terminal", "outline", "scoreboard", "gradient", "ticker"];
+const cases = [
+  ...presets.map(preset => ({ preset, layout: "vertical", width: 320 })),
+  ...["vertical", "horizontal", "compact", "grid", "split", "dashboard"]
+    .map(layout => ({ preset: "glass", layout, width: 280 })),
+];
+const longText = "custom-long-label-without-any-spaces-abcdef1234567890";
+const labels = {
+  bitrate: longText, rtt: "Latency", throughput: "Raw network throughput",
+  peers: "SRTLA connections", link: "Transport link", jitter: longText,
+  uptime: "Streaming uptime", status: "Signal health",
+  live: "CONNECTED", offline: "DISCONNECTED",
+  bitrate_graph: "Bitrate for the recent connection",
+  rtt_graph: "Round-trip history graph",
+  bitrate_bar: "Connection bitrate",
+  links_singular: "uplink", links_plural: "uplinks",
+  kbps: "kb/s", mbps: "Mb/s", ms: "ms",
+};
+const settings = (preset, layout) => ({
+  design: {
+    preset, layout, align: "left", font_size: 23,
+    show_bitrate_label: true, font_weight: 700,
+    padding: "8px 10px", row_padding: "6px 12px",
+    background: "rgba(12, 18, 30, 0.85)",
+  },
+  display: {
+    labels, bitrate: true, rtt: true, throughput: true, peers: true,
+    uptime: true, status: true, graph: true, rtt_graph: true,
+    bitrate_bar: true, history_points: 20,
+    graph_width: 300, graph_height: 90,
+    title: "A long overlay title that needs to wrap to fit",
+  },
+});
+const createPreview = item => new Promise(resolve => {
+  const frame = document.createElement("iframe");
+  frame.width = item.width;
+  frame.height = 1200;
+  frame.style.cssText = "position:absolute;left:-10000px;top:0;visibility:hidden";
+  frame.src = "../bitrate.html?demo=1&srtla=1";
+  frame.addEventListener("load", () => resolve({ frame, item }), { once: true });
+  document.body.appendChild(frame);
+});
+
+const applyPreview = ({ frame, item }) => {
+  frame.contentWindow.postMessage({
+    type: "bitrate-overlay-preview",
+    settings: settings(item.preset, item.layout),
+  }, location.origin);
+};
+
+const previewApplied = ({ frame, item }) => {
+  const overlay = frame.contentDocument?.getElementById("overlay");
+  return overlay?.classList.contains("preset-" + item.preset) &&
+    overlay.classList.contains("layout-" + item.layout) &&
+    overlay.querySelector(".overlay-title")?.textContent ===
+      "A long overlay title that needs to wrap to fit";
+};
+
+// Resolve only after all previews have applied their appearance settings.
+// A scheduled retry avoids await-in-loop and handles slower CI browsers.
+const waitForPreviews = frames => new Promise((resolve, reject) => {
+  const deadline = Date.now() + 9000;
+  const check = () => {
+    if (frames.every(previewApplied)) {
+      resolve();
+      return;
+    }
+    if (Date.now() > deadline) {
+      const missing = frames.filter(frame => !previewApplied(frame))
+        .map(({ item }) => item.preset + "/" + item.layout);
+      reject(new Error("Overlay preview did not update: " + missing.join(", ")));
+      return;
+    }
+    setTimeout(check, 40);
+  };
+  check();
+});
+
+const auditElement = (element, root, doc, label) => {
+  const failures = [];
+  const rect = element.getBoundingClientRect();
+  const limit = Math.min(root.right + 2, doc.documentElement.clientWidth + 2);
+  if (rect.right > limit || rect.left < root.left - 2) {
+    failures.push(label + ": overflow " + element.className +
+      " at " + rect.right.toFixed(1) + " > " + limit.toFixed(1));
+  }
+  // A box may fit while long text inside it is clipped or scrollable.
+  if (element.matches(".label, .value, .chart-label, .overlay-title") &&
+      element.scrollWidth > element.clientWidth + 1) {
+    failures.push(label + ": clipped text in " + element.className +
+      " (" + element.scrollWidth + " > " + element.clientWidth + ")");
+  }
+  return failures;
+};
+
+const auditFrame = ({ frame, item }) => {
+  const doc = frame.contentDocument;
+  const overlay = doc.getElementById("overlay");
+  const root = overlay.getBoundingClientRect();
+  const checked = [...overlay.querySelectorAll(
+    ".row, .chart, .bar-widget, .label, .value, .chart-label, .overlay-title"
+  )];
+  const label = item.preset + "/" + item.layout;
+  if (!checked.length) return [label + ": no widgets"];
+  return checked.flatMap(element => auditElement(element, root, doc, label));
+};
+
+async function runAudit() {
+  const frames = await Promise.all(cases.map(createPreview));
+  try {
+    frames.forEach(applyPreview);
+    await waitForPreviews(frames);
+    const failures = frames.flatMap(auditFrame);
+    const output = document.getElementById("audit-result");
+    output.textContent = failures.length ? "FAIL " + failures.join("; ") : "PASS: 18 layout checks";
+  } finally {
+    frames.forEach(({ frame }) => frame.remove());
+  }
+}
+
+try {
+  await runAudit();
+} catch (error) {
+  document.getElementById("audit-result").textContent = "FAIL " + error;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stream Bitrate Overlay</title>
+  <style>
+    :root {
+      --color-green: #4ade80;
+      --color-orange: #fb923c;
+      --color-red: #f87171;
+      --color-muted: rgba(255, 255, 255, 0.65);
+      --font: 'Segoe UI', 'Inter', system-ui, sans-serif;
+      --font-size: 22px;
+      --label-size: 11px;
+      --font-weight: 700;
+      --gap: 6px;
+      --radius: 12px;
+      --surface: rgba(12, 18, 30, 0.82);
+      --border: rgba(255, 255, 255, 0.15);
+      --shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+      --accent: #38bdf8;
+      --row-padding: 6px 12px;
+      --border-width: 1px;
+      --indicator-size: 8px;
+      --value-spacing: 0px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { background: transparent; }
+    body {
+      background: transparent;
+      font-family: var(--font);
+      overflow: hidden;
+      display: flex;
+      align-items: flex-end;
+      min-height: 100vh;
+      width: 100%;
+    }
+    /* Demo-only checkerboard helps distinguish transparency from white backgrounds.
+       The live OBS overlay never applies this background. */
+    body.demo-mode {
+      background: repeating-conic-gradient(#22324a 0% 25%, #2e4059 0% 50%) 50% / 26px 26px;
+    }
+    #overlay {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: var(--gap);
+      width: max-content;
+      max-width: 100%;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    #overlay.layout-horizontal {
+      flex-direction: row;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: var(--font-size);
+      font-weight: var(--font-weight);
+      letter-spacing: var(--value-spacing);
+      line-height: 1.2;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      min-width: 0;
+      max-width: 100%;
+      flex-wrap: wrap;
+      text-shadow: var(--shadow);
+    }
+    .value { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .label {
+      overflow-wrap: anywhere;
+      min-width: 0;
+      max-width: 100%;
+      font-size: var(--label-size);
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+    }
+    .dot {
+      display: inline-block;
+      width: var(--indicator-size);
+      height: var(--indicator-size);
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.85;
+      flex-shrink: 0;
+    }
+    .green { color: var(--color-green); }
+    .orange { color: var(--color-orange); }
+    .red { color: var(--color-red); }
+    .no-signal { color: var(--color-red); }
+
+    /* Presets are purely visual; all data sources use the same renderer. */
+    .row.detail {
+      color: var(--color-muted);
+      font-size: calc(var(--font-size) * 0.58);
+      font-weight: 600;
+    }
+    #overlay.indicator-square .dot { border-radius: 2px; }
+    #overlay.indicator-bar .dot { width: 4px; height: calc(var(--font-size) * 0.85); border-radius: 2px; }
+    #overlay.indicator-none .dot { display: none; }
+
+    #overlay.preset-pill .row {
+      padding: var(--row-padding);
+      border: var(--border-width) solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    #overlay.preset-card {
+      padding: 12px 16px;
+      border: var(--border-width) solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    #overlay.preset-minimal .dot { display: none; }
+    #overlay.preset-minimal .row { gap: 4px; }
+
+    /* Glass: translucent surface with optional backdrop blur. */
+    #overlay.preset-glass {
+      padding: 13px 17px;
+      border: var(--border-width) solid rgba(255, 255, 255, 0.3);
+      border-radius: var(--radius);
+      background: var(--surface);
+      -webkit-backdrop-filter: blur(14px) saturate(145%);
+      backdrop-filter: blur(14px) saturate(145%);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.22), inset 0 1px rgba(255, 255, 255, 0.16);
+    }
+    /* Neon: accent outline with status-driven value glow. */
+    #overlay.preset-neon {
+      padding: 11px 16px;
+      border: var(--border-width) solid var(--accent);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 0 0 16px var(--accent), inset 0 0 12px rgba(0, 0, 0, 0.25);
+    }
+    #overlay.preset-neon .row { text-shadow: 0 0 9px currentColor; }
+    #overlay.preset-neon .dot { box-shadow: 0 0 9px currentColor; }
+    /* Broadcast: clear, rectangular live-show lower third. */
+    #overlay.preset-broadcast {
+      padding: 9px 14px;
+      border-left: 5px solid var(--accent);
+      border-radius: 3px;
+      background: var(--surface);
+      box-shadow: 0 5px 12px rgba(0, 0, 0, 0.22);
+    }
+    #overlay.preset-broadcast .row + .row { border-top: 1px solid var(--border); padding-top: 7px; }
+    #overlay.preset-broadcast.layout-horizontal .row + .row { border-top: 0; border-left: 1px solid var(--border); padding: 0 0 0 12px; }
+    #overlay.preset-broadcast .label { color: var(--accent); }
+    /* Terminal: monospaced console panel, no rounded edges. */
+    #overlay.preset-terminal {
+      font-family: Consolas, 'Courier New', monospace;
+      padding: 10px 14px;
+      border: var(--border-width) solid var(--accent);
+      border-radius: 0;
+      background: var(--surface);
+    }
+    #overlay.preset-terminal .label { color: var(--accent); }
+    #overlay.preset-terminal .dot { border-radius: 0; }
+    #overlay.preset-terminal .row { letter-spacing: 0.02em; text-shadow: none; }
+    /* Outline: individually framed transparent metrics. */
+    #overlay.preset-outline .row {
+      padding: var(--row-padding);
+      border: var(--border-width) solid currentColor;
+      border-radius: var(--radius);
+      background: transparent;
+    }
+    #overlay.preset-outline .row.detail { border-color: var(--border); }
+    /* Scoreboard: segmented live-event counter. */
+    #overlay.preset-scoreboard {
+      padding: 8px 10px;
+      border: var(--border-width) solid var(--border);
+      border-radius: 5px;
+      background: var(--surface);
+    }
+    #overlay.preset-scoreboard .row {
+      padding: var(--row-padding);
+      border-top: 3px solid currentColor;
+      background: rgba(255, 255, 255, 0.035);
+    }
+    #overlay.preset-scoreboard.layout-horizontal .row { border-top-width: 3px; }
+    /* Gradient: high-contrast colorful surface, metrics remain status-colored. */
+    #overlay.preset-gradient {
+      padding: 13px 17px;
+      border: var(--border-width) solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, var(--accent) -150%, var(--surface) 70%);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    }
+    /* Ticker: compact horizontal status strip. */
+    #overlay.preset-ticker {
+      flex-direction: row;
+      align-items: center;
+      padding: 7px 11px;
+      gap: 14px;
+      border: var(--border-width) solid var(--border);
+      border-radius: 3px;
+      background: var(--surface);
+      flex-wrap: wrap;
+      max-width: 100%;
+    }
+    #overlay.preset-ticker .row + .row {
+      border-left: 1px solid var(--border);
+      padding-left: 13px;
+      flex-wrap: wrap;
+    }
+    #overlay.preset-ticker .row {
+      font-size: calc(var(--font-size) * 0.9);
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    /* Metric layout is independent of the decorative preset. */
+    #overlay.layout-grid,
+    #overlay.layout-dashboard,
+    #overlay.layout-split {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+    }
+    #overlay.layout-grid .chart,
+    #overlay.layout-dashboard .chart,
+    #overlay.layout-split .chart,
+    #overlay.layout-dashboard .bar-widget,
+    #overlay.layout-split .bar-widget {
+      grid-column: 1 / -1;
+    }
+    #overlay.layout-dashboard { grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: min(290px, 100%); }
+    #overlay.layout-dashboard .row { padding: 3px 6px; }
+    #overlay.layout-split { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 18px; }
+    #overlay.layout-compact { flex-direction: row; flex-wrap: wrap; align-items: center; }
+    .chart { position: relative; width: min(100%, var(--chart-width)); min-width: 0; max-width: 100%; }
+    .chart-label { display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; flex-wrap: wrap; min-width: 0; max-width: 100%;
+      font-size: var(--label-size); letter-spacing: .06em;
+      font-weight: 700; color: var(--color-muted); overflow-wrap: anywhere; }
+    .chart svg { display: block; width: 100%; height: auto; overflow: hidden; }
+    .bar-widget { width: min(100%, var(--chart-width)); min-width: 0; max-width: 100%; }
+    .bar-track { height: var(--bar-height); border: 1px solid var(--border);
+      border-radius: var(--radius); background: rgba(127, 145, 180, .18); overflow: hidden; }
+    .bar-fill { height: 100%; background: currentColor; transition: width .2s linear; }
+    .metric-status { font-size: var(--label-size); letter-spacing: .1em; font-weight: 700; }
+    #overlay .row.detail { max-width: 100%; }
+    #overlay.layout-horizontal .row, #overlay.layout-compact .row {
+      min-width: 0;
+      max-width: 100%;
+    }
+    @media (max-width: 360px) {
+      #overlay.layout-grid, #overlay.layout-dashboard, #overlay.layout-split {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      #overlay.layout-grid .chart, #overlay.layout-dashboard .chart,
+      #overlay.layout-split .chart, #overlay.layout-dashboard .bar-widget,
+      #overlay.layout-split .bar-widget { grid-column: auto; }
+      #overlay.preset-ticker .row + .row { border-left: 0; padding-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <output id="overlay" aria-live="off"></output>
+
+  <script>
+    // ─── Server configuration ──────────────────────────────────────────────────
+    // First server returning a positive bitrate wins. Others are fallbacks.
+    // The visual generator replaces ONLY this marker when exporting a local HTML file.
+    // Do not publish exported files containing stats keys to a public web server.
+    const EMBEDDED_SETTINGS = null; // GENERATED_OVERLAY_SETTINGS
+    const interval = Math.min(60000, Math.max(500, Number(EMBEDDED_SETTINGS?.interval) || 2000));
+    const request_timeout = Math.min(30000, Math.max(500, Number(EMBEDDED_SETTINGS?.request_timeout) || 4000));
+
+    const servers = [
+      // SRT-Live-Server /stats (publisher stream path)
+      { type: "SRT", page: "http://127.0.0.1:8181/stats", publisher: "publish/live/test", show_rtt: true },
+
+      // OpenIRL SLS stats page: page is /stats, key is the PLAYER ID.
+      // You can alternatively put /stats/<player_id> in page and omit key.
+      // Peer modes (SRTLA only): "off", "count", or "details".
+      // { type: "OpenIRL", page: "http://127.0.0.1:8080/stats", key: "live",
+      //   show_rtt: true, show_label: true, show_throughput: false,
+      //   peer_display: "details", max_peers: 4 },
+
+      // OpenRTMP librtmp2-server: PUBLIC stats_key, NOT an API bearer token.
+      // Also accepts a full page URL with ?key=... and no separate key field.
+      // { type: "OpenRTMP", page: "http://127.0.0.1:8080/stats", key: "sts_your_stats_key", show_rtt: true, show_label: true },
+
+      // Node-Media-Server
+      // { type: "NMS", page: "http://localhost:8000/api/streams/live/feed1" },
+
+      // RIST receiver stats from moo-the-cow StatsServer.
+      // Native defaults to ws://127.0.0.1:8081; Docker maps 8683 -> 8081.
+      // { type: "RIST", page: "ws://127.0.0.1:8683", show_rtt: true,
+      //   peer_display: "details", max_peers: 4 },
+
+      // nginx-rtmp /stat XML
+      // { type: "NGINX", page: "http://localhost/stat", key: "live" },
+    ];
+
+    // ─── Appearance ────────────────────────────────────────────────────────────
+    // Edit these values to change the overlay in OBS; no build step is needed.
+    const design = {
+      preset: "classic",            // classic | pill | card | minimal | glass | neon
+                                    // broadcast | terminal | outline | scoreboard | gradient | ticker
+      layout: "vertical",           // "vertical" or "horizontal"
+      align: "right",               // "left", "center", "right"
+      font_family: "'Segoe UI', 'Inter', system-ui, sans-serif",
+      font_size: 22,                // Value size in px
+      label_size: 11,               // Label size in px
+      font_weight: 700,
+      gap: 4,                       // Spacing between rows in px
+      row_padding: "6px 12px",       // For pill, outline and scoreboard
+      border_width: 1,              // Border thickness in px
+      padding: "6px 10px",          // Outer OBS overlay padding
+      corner_radius: 12,           // Pill/card corner radius in px
+      background: "rgba(12, 18, 30, 0.82)", // Only used by panel-style presets; classic stays transparent
+      border_color: "rgba(255, 255, 255, 0.15)",
+      accent_color: "#38bdf8",     // Frames and highlight for selected presets
+      letter_spacing: 0,           // Letter spacing in px
+      indicator_size: 8,           // Status indicator size in px
+      indicator_style: "dot",       // dot | square | bar | none
+      text_shadow: true,
+      show_dot: true,               // Minimal preset hides dots regardless
+      show_bitrate_label: false,
+      show_units: true,
+      bitrate_unit: "kb/s",         // "kb/s" or "Mb/s"; colors always use kb/s
+      mbps_decimals: 2,
+      offline_text: "NO SIGNAL",
+      colors: {
+        green: "#4ade80",
+        orange: "#fb923c",
+        red: "#f87171",
+        muted: "rgba(255, 255, 255, 0.65)",
+      },
+    };
+
+    // Thresholds stay in kb/s and ms, regardless of the display unit.
+    const thresholds = {
+      bitrate_orange: 2500, // <= 2500 kb/s => orange
+      bitrate_red: 1200,    // <= 1200 kb/s => red
+      rtt_orange: 120,      // >= 120 ms => orange
+      rtt_red: 250,         // >= 250 ms => red
+    };
+
+    // Every widget can be enabled independently and ordered in the generator.
+    const display = {
+      bitrate: true,
+      rtt: true,
+      throughput: true,   // Only displayed when server.show_throughput is true
+      peers: true,        // Only displayed when server.peer_display is enabled
+      uptime: false,
+      status: false,
+      graph: false,
+      rtt_graph: false,
+      bitrate_bar: false,
+      title: "",
+      labels: {
+        bitrate: "BITRATE",
+        rtt: "RTT",
+        throughput: "NETWORK",
+        peers: "SRTLA",
+        rist_peers: "RIST",
+        link: "LINK",
+        jitter: "jitter",
+        peer_separator: " · ",
+        empty_value: "–",
+        uptime: "UPTIME",
+        status: "STATUS",
+        live: "LIVE",
+        offline: "OFFLINE",
+        bitrate_graph: "BITRATE HISTORY",
+        rtt_graph: "RTT HISTORY",
+        bitrate_bar: "BITRATE LEVEL",
+        links_singular: "link",
+        links_plural: "links",
+        kbps: "kb/s",
+        mbps: "Mb/s",
+        ms: "ms",
+      },
+      history_points: 60,
+      graph_width: 320,
+      graph_height: 105,
+      graph_color: "status", // "status" or "accent"
+      graph_fill: true,
+      graph_grid: true,
+      graph_max: 0,       // 0 = automatic max, in kb/s or ms
+      bar_max: 6000,      // kb/s full-scale
+      bar_height: 10,
+      order: ["bitrate", "rtt", "throughput", "peers", "uptime", "status",
+        "bitrate_bar", "graph", "rtt_graph"],
+    };
+    if (EMBEDDED_SETTINGS && typeof EMBEDDED_SETTINGS === "object") {
+      if (Array.isArray(EMBEDDED_SETTINGS.servers)) {
+        servers.splice(0, servers.length, ...EMBEDDED_SETTINGS.servers.slice(0, 20));
+      }
+      if (EMBEDDED_SETTINGS.design && typeof EMBEDDED_SETTINGS.design === "object") {
+        const overrides = EMBEDDED_SETTINGS.design;
+        const originalColors = { ...design.colors };
+        Object.assign(design, overrides);
+        design.colors = { ...originalColors, ...overrides.colors };
+      }
+      if (EMBEDDED_SETTINGS.thresholds && typeof EMBEDDED_SETTINGS.thresholds === "object") {
+        Object.assign(thresholds, EMBEDDED_SETTINGS.thresholds);
+      }
+      if (EMBEDDED_SETTINGS.display && typeof EMBEDDED_SETTINGS.display === "object") {
+        const overrides = EMBEDDED_SETTINGS.display;
+        const originalLabels = { ...display.labels };
+        Object.assign(display, overrides);
+        display.labels = { ...originalLabels, ...overrides.labels };
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
+    const numeric = (value) => {
+      if (value === null || value === undefined || value === "") return null;
+      const number = Number(value);
+      return Number.isFinite(number) ? number : null;
+    };
+
+    const normalized = (bitrate, rtt) => {
+      const kbps = numeric(bitrate);
+      if (kbps === null || kbps <= 0) return null;
+      const delay = numeric(rtt);
+      return { bitrate: kbps, rtt: delay !== null && delay >= 0 ? delay : null };
+    };
+
+    // Include response body consumption in the timeout, not just HTTP headers.
+    const tryFetch = async (url, format = "json") => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), Math.max(250, request_timeout));
+      try {
+        const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
+        if (!response.ok) return null;
+        return format === "text" ? await response.text() : await response.json();
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
+
+    const fetchSRT = async ({ page, publisher }) => {
+      const data = await tryFetch(page);
+      if (!data) return null;
+      try {
+        const publisherData = data.publishers?.[publisher];
+        const stats = publisherData ? normalized(publisherData.bitrate, publisherData.rtt) : null;
+        return stats ? { ...stats, uptime: numeric(publisherData.uptime) } : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const openIRLUrl = ({ page, key }) => {
+      const url = new URL(page, window.location.href);
+      if (key) {
+        const pathname = url.pathname;
+        let end = pathname.length;
+        while (end > 0 && pathname[end - 1] === "/") end--;
+        url.pathname = pathname.slice(0, end) + "/" + encodeURIComponent(key);
+      }
+      return url.toString();
+    };
+
+    const fetchOpenIRL = async (server) => {
+      try {
+        const data = await tryFetch(openIRLUrl(server));
+        if (!data) return null;
+        if (!data.publisher || (data.status && data.status !== "ok")) return null;
+
+        // OpenIRL modern stats expose the same aggregate fields for SRT and SRTLA.
+        // Only SRTLA returns publisher.peers (per-link bitrate/throughput/jitter).
+        const publisher = data.publisher;
+        const stats = normalized(publisher.bitrate, publisher.rtt);
+        if (!stats) return null;
+        const peers = Array.isArray(publisher.peers) ? publisher.peers : null;
+        return {
+          ...stats,
+          throughput: numeric(publisher.throughput),
+          uptime: numeric(publisher.uptime),
+          peers: peers && peers.map((peer) => ({
+            bitrate: numeric(peer.bitrate),
+            throughput: numeric(peer.throughput),
+            jitter: numeric(peer.jitter), // milliseconds
+          })),
+        };
+      } catch {
+        return null;
+      }
+    };
+
+    const openRTMPUrl = ({ page, key }) => {
+      const url = new URL(page, window.location.href);
+      if (key) url.searchParams.set("key", key);
+      return url.toString();
+    };
+
+    const fetchOpenRTMP = async (server) => {
+      try {
+        const data = await tryFetch(openRTMPUrl(server));
+        if (!data || typeof data !== "object") return null;
+        // Public /stats returns a flat, per-stream JSON object.
+        const stats = normalized(data.bitrate_kbps, data.rtt_ms);
+        return stats ? { ...stats, uptime: numeric(data.uptime) } : null;
+      } catch {
+        // OpenRTMP responds with "Stream offline" as plain text when offline.
+        return null;
+      }
+    };
+
+    const fetchNMS = async ({ page }) => {
+      const data = await tryFetch(page);
+      if (!data) return null;
+      try {
+        return normalized(data.bitrate, null);
+      } catch {
+        return null;
+      }
+    };
+
+    const selectNginxApplication = (doc, key) => {
+      for (const application of doc.getElementsByTagName("application")) {
+        const name = Array.from(application.children).find(child => child.tagName === "name");
+        if (name?.textContent?.trim() === key) return application;
+      }
+      return null;
+    };
+
+    const fetchNGINX = async ({ page, key }) => {
+      const xml = await tryFetch(page, "text");
+      if (!xml) return null;
+      try {
+        const doc = new DOMParser().parseFromString(xml, "text/xml");
+        if (doc.getElementsByTagName("parsererror").length) return null;
+        const application = selectNginxApplication(doc, key);
+        if (!application) return null;
+        for (const stream of application.getElementsByTagName("stream")) {
+          if (!stream.getElementsByTagName("publishing").length) continue;
+          const node = stream.getElementsByTagName("bw_in")[0];
+          if (!node) continue;
+          const stats = normalized(numeric(node.textContent) / 1000, null);
+          if (stats) return stats;
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
+    // moo-the-cow's RIST StatsServer exposes the libRIST receiver-stats
+    // payload via WebSocket (native :8081, Docker published :8683).
+    // peer.stats.bitrate is in bits/second. Convert to decimal kb/s to
+    // match this overlay's existing thresholds, excluding dead peers.
+    const parseRISTStats = (payload) => {
+      const flow = payload?.["receiver-stats"]?.flowinstant;
+      if (!flow || Number(flow.dead) === 1 || !Array.isArray(flow.peers)) return null;
+      const peers = flow.peers.filter(peer => Number(peer?.dead) !== 1);
+      const active = peers.map(peer => ({
+        bitrate: numeric(peer?.stats?.bitrate),
+        rtt: numeric(peer?.stats?.rtt),
+      })).filter(peer => peer.bitrate !== null && peer.bitrate > 0);
+      if (!active.length) return null;
+      const kbps = active.reduce((total, peer) => total + peer.bitrate, 0) / 1000;
+      const rtts = active.map(peer => peer.rtt).filter(value => value !== null && value >= 0);
+      const rtt = rtts.length ? rtts.reduce((total, value) => total + value, 0) / rtts.length : null;
+      const stats = normalized(kbps, rtt);
+      if (!stats) return null;
+      return {
+        ...stats,
+        peers: active.map(peer => ({
+          bitrate: peer.bitrate / 1000,
+          jitter: null, // Not guaranteed by libRIST's receiver peer statistics.
+        })),
+      };
+    };
+
+    // Reuse one socket per StatsServer endpoint. Polling the current snapshot
+    // is cheap; stale or closed sockets fall back to the next configured server.
+    const ristSockets = new Map();
+    const ristSocketState = (url) => {
+      if (typeof WebSocket !== "function") return null;
+      const existing = ristSockets.get(url);
+      if (existing && existing.socket.readyState < 2) return existing;
+      const state = { socket: null, data: null, updatedAt: 0, listeners: new Set() };
+      try {
+        const socket = new WebSocket(url);
+        state.socket = socket;
+        ristSockets.set(url, state);
+        const notify = () => {
+          for (const listener of state.listeners) listener(state.data);
+          state.listeners.clear();
+        };
+        socket.onmessage = event => {
+          let payload;
+          try {
+            payload = JSON.parse(event.data);
+          } catch {
+            return;
+          }
+          // Ignore unrelated messages such as acknowledgements.
+          if (!payload || !Object.hasOwn(payload, "receiver-stats")) return;
+          state.data = parseRISTStats(payload);
+          state.updatedAt = Date.now();
+          notify();
+        };
+        socket.onclose = () => {
+          state.data = null;
+          state.updatedAt = 0;
+          notify();
+        };
+        socket.onerror = () => socket.close();
+        return state;
+      } catch {
+        ristSockets.delete(url);
+        return null;
+      }
+    };
+
+    const ristWaitForMessage = state => new Promise(resolve => {
+      let timer;
+      const finish = data => {
+        clearTimeout(timer);
+        state.listeners.delete(finish);
+        resolve(data);
+      };
+      state.listeners.add(finish);
+      timer = setTimeout(() => finish(null), request_timeout);
+    });
+
+    const fetchRIST = async ({ page }) => {
+      try {
+        const url = new URL(page, window.location.href);
+        if (url.protocol === "http:" || url.protocol === "https:") {
+          // Also accepts a user-specified HTTP JSON stats URL, when provided.
+          return parseRISTStats(await tryFetch(url.toString()));
+        }
+        if (url.protocol !== "ws:" && url.protocol !== "wss:") return null;
+        const state = ristSocketState(url.toString());
+        if (!state) return null;
+        const maxAge = Math.max(5000, interval * 3);
+        // A recent offline report is a valid snapshot too: fall back immediately.
+        if (state.updatedAt && Date.now() - state.updatedAt <= maxAge) return state.data;
+        // A new message is needed once stats become stale.
+        if (state.socket.readyState >= 2) return null;
+        return await ristWaitForMessage(state);
+      } catch {
+        return null;
+      }
+    };
+
+    const fetchers = {
+      SRT: fetchSRT,
+      OpenIRL: fetchOpenIRL,
+      OpenRTMP: fetchOpenRTMP,
+      RIST: fetchRIST,
+      NMS: fetchNMS,
+      NGINX: fetchNGINX,
+    };
+
+    const getBitrate = async () => {
+      for (const server of servers) {
+        const fetcher = fetchers[server.type];
+        if (!fetcher) continue;
+        const data = await fetcher(server);
+        if (data) return { data, server };
+      }
+      return null;
+    };
+
+    const statusColor = (value, orange, red, higherIsBad) => {
+      if (higherIsBad) {
+        if (value >= red) return "red";
+        return value >= orange ? "orange" : "green";
+      }
+      if (value <= red) return "red";
+      return value <= orange ? "orange" : "green";
+    };
+
+    const applyDesign = () => {
+      const root = document.documentElement.style;
+      const css = (name, value) => root.setProperty(name, String(value));
+      css("--color-green", design.colors.green);
+      css("--color-orange", design.colors.orange);
+      css("--color-red", design.colors.red);
+      css("--color-muted", design.colors.muted);
+      css("--font", design.font_family);
+      css("--font-size", design.font_size + "px");
+      css("--label-size", design.label_size + "px");
+      css("--font-weight", design.font_weight);
+      css("--gap", design.gap + "px");
+      css("--radius", design.corner_radius + "px");
+      css("--surface", design.background);
+      css("--border", design.border_color);
+      css("--accent", design.accent_color);
+      css("--row-padding", design.row_padding);
+      css("--border-width", Math.max(0, Number(design.border_width) || 0) + "px");
+      css("--indicator-size", Math.max(0, Number(design.indicator_size) || 0) + "px");
+      css("--value-spacing", Number(design.letter_spacing) + "px");
+      css("--chart-width", Math.max(120, Math.min(960, Number(display.graph_width) || 320)) + "px");
+      css("--bar-height", Math.max(3, Math.min(50, Number(display.bar_height) || 10)) + "px");
+      css("--shadow", design.text_shadow ? "0 1px 4px rgba(0, 0, 0, 0.7)" : "none");
+      document.body.style.padding = design.padding;
+      const alignments = { left: "flex-start", center: "center", right: "flex-end" };
+      // In the row-oriented body, justifyContent is the horizontal axis.
+      // Keep alignItems at flex-end to anchor the overlay to the bottom of OBS.
+      document.body.style.justifyContent = alignments[design.align] || "flex-end";
+      const overlay = document.getElementById("overlay");
+      const presets = ["classic", "pill", "card", "minimal", "glass", "neon",
+        "broadcast", "terminal", "outline", "scoreboard", "gradient", "ticker"];
+      const indicators = ["dot", "square", "bar", "none"];
+      overlay.className = "preset-" + (presets.includes(design.preset) ? design.preset : "classic") +
+        " layout-" + (["vertical", "horizontal", "compact", "grid", "split", "dashboard"].includes(design.layout)
+          ? design.layout : "vertical") +
+        " indicator-" + (indicators.includes(design.indicator_style) ? design.indicator_style : "dot");
+      overlay.style.alignItems = alignments[design.align] || "flex-end";
+    };
+
+    const labelText = (name) => {
+      const value = display.labels?.[name];
+      return typeof value === "string" ? value.slice(0, 100) : "";
+    };
+    const withUnit = (value, unitName) => {
+      if (!design.show_units || !labelText(unitName)) return String(value);
+      return value + " " + labelText(unitName);
+    };
+    const span = (className, value) => {
+      const el = document.createElement("span");
+      el.className = className;
+      el.textContent = value;
+      return el;
+    };
+
+    const makeRow = (value, color, label) => {
+      const row = document.createElement("div");
+      row.className = "row " + color;
+      if (label) row.appendChild(span("label", label));
+      if (design.show_dot) row.appendChild(span("dot", ""));
+      row.appendChild(span("value", value));
+      return row;
+    };
+
+    const displayBitrate = (kbps) => {
+      const isMbps = design.bitrate_unit === "Mb/s";
+      const amount = isMbps ? (kbps / 1000).toFixed(Math.max(0, Math.min(5, design.mbps_decimals))) : Math.round(kbps);
+      return withUnit(amount, isMbps ? "mbps" : "kbps");
+    };
+
+    // Graph data is deliberately ephemeral. Never persist stream keys or stats history.
+    const history = [];
+    const recordSample = (result) => {
+      history.push(result ? { bitrate: result.data.bitrate, rtt: result.data.rtt } : null);
+      const limit = Math.min(600, Math.max(5, Number(display.history_points) || 60));
+      if (history.length > limit) history.splice(0, history.length - limit);
+    };
+    const svgNode = (name, attributes) => {
+      const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+      for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+      return node;
+    };
+    const graphCeiling = (metric, values) => {
+      const valid = values.filter(value => value !== null && value >= 0);
+      const observed = valid.length ? Math.max(...valid) : 0;
+      const fixed = numeric(display.graph_max);
+      if (fixed !== null && fixed > 0) return fixed;
+      const minimum = metric === "rtt" ? 100 : 3000;
+      return Math.max(minimum, Math.ceil(observed * 1.2 / 100) * 100);
+    };
+
+    const drawGraphGrid = (svg, width, height) => {
+      if (!display.graph_grid) return;
+      const plotHeight = height - 10;
+      for (let i = 0; i <= 4; i++) {
+        const y = 5 + plotHeight * i / 4;
+        svg.appendChild(svgNode("line", { x1: 0, y1: y, x2: width, y2: y,
+          stroke: "var(--border)", "stroke-width": 1 }));
+      }
+    };
+
+    const graphSegments = (values, width, height, ceiling) => {
+      const slots = Math.max(2, Number(display.history_points) || 60);
+      const segments = [];
+      let segment = [];
+      for (const [i, value] of values.entries()) {
+        if (value === null || value < 0) {
+          if (segment.length) segments.push(segment);
+          segment = [];
+          continue;
+        }
+        segment.push([(width - 2) * i / (slots - 1),
+          height - 5 - Math.min(value / ceiling, 1) * (height - 10)]);
+      }
+      if (segment.length) segments.push(segment);
+      return segments;
+    };
+
+    const drawGraphSegment = (svg, points, bottom, color) => {
+      const path = points.map(([x, y], index) =>
+        (index === 0 ? "M" : "L") + x.toFixed(2) + " " + y.toFixed(2)).join(" ");
+      if (display.graph_fill && points.length > 1) {
+        const first = points[0][0];
+        const last = points.at(-1)[0];
+        svg.appendChild(svgNode("path", { d: path + " L" + last + " " + bottom +
+          " L" + first + " " + bottom + " Z", fill: color,
+          "fill-opacity": 0.13, stroke: "none" }));
+      }
+      svg.appendChild(svgNode("path", { d: path, fill: "none", stroke: color,
+        "stroke-width": Math.max(1, Number(display.graph_line_width) || 2),
+        "stroke-linejoin": "round", "stroke-linecap": "round" }));
+      const last = points.at(-1);
+      svg.appendChild(svgNode("circle", { cx: last[0], cy: last[1], r: 2.8, fill: color }));
+    };
+
+    const makeGraph = (metric, title, cssColor) => {
+      const width = Math.max(120, Math.min(960, Number(display.graph_width) || 320));
+      const height = Math.max(50, Math.min(300, Number(display.graph_height) || 105));
+      const count = Math.min(600, Math.max(5, Number(display.history_points) || 60));
+      const values = history.slice(-count).map(sample => sample ? numeric(sample[metric]) : null);
+      const ceiling = graphCeiling(metric, values);
+      const card = document.createElement("div");
+      card.className = "chart";
+      const label = document.createElement("div");
+      label.className = "chart-label";
+      let scaleText = displayBitrate(ceiling);
+      if (metric === "rtt") scaleText = withUnit(Math.round(ceiling), "ms");
+      if (title) label.append(span("", title));
+      label.append(span("", scaleText));
+      const defined = values.filter(value => value !== null && value >= 0);
+      const lastValue = defined.at(-1) ?? 0;
+      const svg = svgNode("svg", { viewBox: "0 0 " + width + " " + height, role: "img",
+        "aria-label": title + " history, latest " + lastValue });
+      drawGraphGrid(svg, width, height);
+      const color = display.graph_color === "accent" ? "var(--accent)" : cssColor;
+      for (const segment of graphSegments(values, width, height, ceiling)) {
+        drawGraphSegment(svg, segment, height - 5, color);
+      }
+      card.append(label, svg);
+      return card;
+    };
+    const makeBar = (bitrate, color) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "bar-widget " + color;
+      const header = document.createElement("div");
+      header.className = "chart-label";
+      if (labelText("bitrate_bar")) header.appendChild(span("", labelText("bitrate_bar")));
+      header.appendChild(span("", displayBitrate(Number(display.bar_max) || 6000)));
+      const track = document.createElement("div");
+      track.className = "bar-track";
+      const fill = document.createElement("div");
+      fill.className = "bar-fill";
+      const max = Math.max(1, Number(display.bar_max) || 6000);
+      fill.style.width = Math.max(0, Math.min(100, bitrate / max * 100)) + "%";
+      track.appendChild(fill);
+      wrapper.append(header, track);
+      return wrapper;
+    };
+    const formatUptime = (seconds) => {
+      const s = Math.max(0, Math.floor(seconds));
+      const pad = n => String(n).padStart(2, "0");
+      const hours = Math.floor(s / 3600);
+      return hours + ":" + pad(Math.floor(s % 3600 / 60)) + ":" + pad(s % 60);
+    };
+    const bitrateLabel = server => {
+      if (server.show_label) return server.label || server.type;
+      return design.show_bitrate_label ? labelText("bitrate") : null;
+    };
+
+    const buildPeerRows = (server, data) => {
+      if (!display.peers || !Array.isArray(data.peers) ||
+          !server.peer_display || server.peer_display === "off") return [];
+      const linkWord = data.peers.length === 1 ? labelText("links_singular") : labelText("links_plural");
+      const countValue = [data.peers.length, linkWord].filter(Boolean).join(" ");
+      const peerLabel = server.type === "RIST" ? labelText("rist_peers") : labelText("peers");
+      const rows = [makeRow(countValue, "detail", peerLabel)];
+      if (server.peer_display !== "details") return rows;
+      const maxPeers = Math.max(0, Math.min(16, Number(server.max_peers) || 4));
+      for (const [index, peer] of data.peers.slice(0, maxPeers).entries()) {
+        const values = [];
+        if (peer.bitrate !== null) values.push(displayBitrate(peer.bitrate));
+        if (peer.jitter !== null) {
+          const jitterValue = withUnit(peer.jitter.toFixed(1), "ms");
+          values.push([jitterValue, labelText("jitter")].filter(Boolean).join(" "));
+        }
+        const linkLabel = [labelText("link"), index + 1].filter(Boolean).join(" ");
+        const value = values.length ? values.join(labelText("peer_separator")) : labelText("empty_value");
+        rows.push(makeRow(value, "detail", linkLabel));
+      }
+      return rows;
+    };
+
+    const buildLiveWidgets = ({ data, server }) => {
+      const widgets = {};
+      const bitrateColor = statusColor(data.bitrate,
+        thresholds.bitrate_orange, thresholds.bitrate_red, false);
+      if (display.bitrate) {
+        widgets.bitrate = [makeRow(displayBitrate(data.bitrate), bitrateColor, bitrateLabel(server))];
+      }
+      if (display.rtt && server.show_rtt && data.rtt !== null) {
+        const rttColor = statusColor(data.rtt, thresholds.rtt_orange, thresholds.rtt_red, true);
+        widgets.rtt = [makeRow(withUnit(Math.round(data.rtt), "ms"), rttColor, labelText("rtt"))];
+      }
+      if (display.throughput && server.show_throughput && data.throughput !== null &&
+          data.throughput !== undefined) {
+        widgets.throughput = [makeRow(displayBitrate(data.throughput), "detail", labelText("throughput"))];
+      }
+      const peers = buildPeerRows(server, data);
+      if (peers.length) widgets.peers = peers;
+      if (display.uptime && data.uptime !== null && data.uptime !== undefined) {
+        widgets.uptime = [makeRow(formatUptime(data.uptime), "detail", labelText("uptime"))];
+      }
+      if (display.bitrate_bar) widgets.bitrate_bar = [makeBar(data.bitrate, bitrateColor)];
+      if (display.status) widgets.status = [makeRow(labelText("live"), "green metric-status", labelText("status"))];
+      return widgets;
+    };
+
+    const historyColor = (result, metric) => {
+      if (!result) return "var(--color-muted)";
+      const { data } = result;
+      if (metric === "rtt") {
+        if (data.rtt === null) return "var(--color-muted)";
+        const color = statusColor(data.rtt, thresholds.rtt_orange, thresholds.rtt_red, true);
+        return "var(--color-" + color + ")";
+      }
+      const color = statusColor(data.bitrate, thresholds.bitrate_orange, thresholds.bitrate_red, false);
+      return "var(--color-" + color + ")";
+    };
+
+    const appendHistoryWidgets = (widgets, result) => {
+      if (display.graph) {
+        widgets.graph = [makeGraph("bitrate", labelText("bitrate_graph"), historyColor(result, "bitrate"))];
+      }
+      if (display.rtt_graph) {
+        widgets.rtt_graph = [makeGraph("rtt", labelText("rtt_graph"), historyColor(result, "rtt"))];
+      }
+    };
+
+    const orderedWidgets = widgets => {
+      const allowed = ["bitrate", "rtt", "throughput", "peers", "uptime", "status",
+        "bitrate_bar", "graph", "rtt_graph"];
+      const order = Array.isArray(display.order) ? display.order : allowed;
+      const names = [...new Set([...order.filter(name => allowed.includes(name)), ...allowed])];
+      return names.flatMap(name => widgets[name] || []);
+    };
+
+    const render = result => {
+      const widgets = result ? buildLiveWidgets(result) : {};
+      if (!result && display.bitrate && design.offline_text) {
+        widgets.bitrate = [makeRow(design.offline_text, "no-signal red", null)];
+      }
+      if (!result && display.status) {
+        widgets.status = [makeRow(labelText("offline"), "red metric-status", labelText("status"))];
+      }
+      appendHistoryWidgets(widgets, result);
+      const elements = orderedWidgets(widgets);
+      if (typeof display.title === "string" && display.title) {
+        elements.unshift(span("label overlay-title", display.title.slice(0, 100)));
+      }
+      document.getElementById("overlay").replaceChildren(...elements);
+    };
+
+    // Sequential polling avoids overlapping requests during server outages.
+    const tick = async () => {
+      try {
+        const result = await getBitrate();
+        recordSample(result);
+        render(result);
+      } catch {
+        render(null);
+      } finally {
+        setTimeout(tick, Math.max(250, interval));
+      }
+    };
+    // Built-in example mode uses synthetic values, never user-provided credentials.
+    const previewParams = new URL(window.location.href).searchParams;
+    const demoMode = previewParams.get("demo") === "1";
+    let demoServerPreview = { show_label: false, label: "" };
+    const samplePreview = () => {
+      const result = { data: {
+        bitrate: 3480, rtt: 46, throughput: 3720, uptime: 3825,
+        peers: [{ bitrate: 1900, jitter: 2.3 }, { bitrate: 1580, jitter: 3.8 }],
+      }, server: {
+        type: "OpenIRL", show_rtt: true,
+        show_label: demoServerPreview.show_label, label: demoServerPreview.label,
+        show_throughput: true,
+        peer_display: previewParams.get("srtla") === "1" ? "details" : "off",
+        max_peers: 2,
+      } };
+      const count = Math.min(600, Math.max(5, Number(display.history_points) || 60));
+      history.length = 0;
+      for (let i = 0; i < count; i++) {
+        history.push({ bitrate: 2900 + Math.sin(i * 0.31) * 450 + Math.cos(i * .13) * 180,
+          rtt: 45 + Math.sin(i * .23) * 18 + Math.cos(i * .09) * 7 });
+      }
+      render(result);
+    };
+    if (demoMode) {
+      document.body.className = "demo-mode";
+      const preset = previewParams.get("preset");
+      const allowedPresets = ["classic", "pill", "card", "minimal", "glass", "neon",
+        "broadcast", "terminal", "outline", "scoreboard", "gradient", "ticker"];
+      if (allowedPresets.includes(preset)) design.preset = preset;
+      if (previewParams.get("layout") === "horizontal") design.layout = "horizontal";
+      const demoSize = Number(previewParams.get("fontSize"));
+      if (previewParams.has("fontSize") && Number.isFinite(demoSize) && demoSize >= 12 && demoSize <= 48) {
+        design.font_size = demoSize;
+      }
+      const demoAccent = previewParams.get("accent");
+      if (demoAccent && /^#[0-9a-fA-F]{6}$/.test(demoAccent)) design.accent_color = demoAccent;
+      const demoIndicator = previewParams.get("indicator");
+      if (["dot", "square", "bar", "none"].includes(demoIndicator)) {
+        design.indicator_style = demoIndicator;
+      }
+      design.align = "left";
+      design.show_bitrate_label = true;
+      // Each example shows the same sample values to allow visual comparison.
+      if (design.preset === "glass") design.background = "rgba(25, 39, 64, 0.52)";
+      if (design.preset === "terminal") {
+        design.background = "rgba(6, 17, 13, 0.97)";
+        design.accent_color = "#4ade80";
+      }
+      applyDesign();
+      samplePreview();
+      // Accept appearance-only preview updates from same-origin generator iframe.
+      // Never accept server credentials via postMessage, and never make API calls here.
+      if (typeof window.addEventListener === "function") {
+        window.addEventListener("message", (event) => {
+          if (event.source !== window.parent || event.origin !== window.location.origin ||
+              !event.data || event.data.type !== "bitrate-overlay-preview") return;
+          const cfg = event.data.settings;
+          if (!cfg || typeof cfg !== "object") return;
+          if (cfg.design && typeof cfg.design === "object") {
+            Object.assign(design, cfg.design);
+            if (cfg.design.colors) design.colors = { ...design.colors, ...cfg.design.colors };
+          }
+          if (cfg.display && typeof cfg.display === "object") Object.assign(display, cfg.display);
+          if (cfg.thresholds && typeof cfg.thresholds === "object") Object.assign(thresholds, cfg.thresholds);
+          if (cfg.serverPreview && typeof cfg.serverPreview === "object") {
+            demoServerPreview = {
+              show_label: cfg.serverPreview.show_label === true,
+              label: typeof cfg.serverPreview.label === "string"
+                ? cfg.serverPreview.label.slice(0, 100) : "",
+            };
+          }
+          applyDesign();
+          samplePreview();
+        });
+      }
+    } else {
+      applyDesign();
+      setTimeout(tick, 0);
+    }
+  </script>
+</body>
+</html>
