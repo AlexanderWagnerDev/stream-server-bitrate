@@ -349,6 +349,8 @@
         peers: "SRTLA",
         link: "LINK",
         jitter: "jitter",
+        peer_separator: " · ",
+        empty_value: "–",
         uptime: "UPTIME",
         status: "STATUS",
         live: "LIVE",
@@ -761,7 +763,8 @@
           values.push([jitterValue, labelText("jitter")].filter(Boolean).join(" "));
         }
         const linkLabel = [labelText("link"), index + 1].filter(Boolean).join(" ");
-        rows.push(makeRow(values.join(" · ") || "–", "detail", linkLabel));
+        const value = values.length ? values.join(labelText("peer_separator")) : labelText("empty_value");
+        rows.push(makeRow(value, "detail", linkLabel));
       }
       return rows;
     };
@@ -821,8 +824,10 @@
     };
 
     const render = result => {
-      const widgets = result ? buildLiveWidgets(result) :
-        { bitrate: [makeRow(design.offline_text, "no-signal red", null)] };
+      const widgets = result ? buildLiveWidgets(result) : {};
+      if (!result && display.bitrate && design.offline_text) {
+        widgets.bitrate = [makeRow(design.offline_text, "no-signal red", null)];
+      }
       if (!result && display.status) {
         widgets.status = [makeRow(labelText("offline"), "red metric-status", labelText("status"))];
       }

@@ -106,6 +106,8 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
       <label>SRTLA connections label<input maxlength="100" data-setting="display.labels.peers"></label>
       <label>Link prefix (e.g. LINK 1)<input maxlength="100" data-setting="display.labels.link"></label>
       <label>Jitter suffix<input maxlength="100" data-setting="display.labels.jitter"></label>
+      <label>Peer values separator<input maxlength="100" data-setting="display.labels.peer_separator"></label>
+      <label>Missing value placeholder<input maxlength="100" data-setting="display.labels.empty_value"></label>
       <label>Uptime label<input maxlength="100" data-setting="display.labels.uptime"></label>
       <label>Status label<input maxlength="100" data-setting="display.labels.status"></label>
       <label>Online status text<input maxlength="100" data-setting="display.labels.live"></label>
@@ -265,6 +267,7 @@ const defaults = {
     labels: {
       bitrate: "BITRATE", rtt: "RTT", throughput: "NETWORK",
       peers: "SRTLA", link: "LINK", jitter: "jitter",
+      peer_separator: " · ", empty_value: "–",
       uptime: "UPTIME", status: "STATUS", live: "LIVE", offline: "OFFLINE",
       bitrate_graph: "BITRATE HISTORY", rtt_graph: "RTT HISTORY",
       bitrate_bar: "BITRATE LEVEL", links_singular: "link", links_plural: "links",
