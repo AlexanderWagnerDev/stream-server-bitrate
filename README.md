@@ -62,10 +62,6 @@ const servers = [
   // { type: "RIST", page: "ws://127.0.0.1:8683", show_rtt: true,
   //   peer_display: "details", max_peers: 4 },
 
-  // RIST StatsServer (moo-the-cow): nativ 8081, Docker 8683 (WebSocket)
-  // { type: "RIST", page: "ws://127.0.0.1:8683", show_rtt: true,
-  //   peer_display: "details", max_peers: 4 },
-
   // Node-Media-Server
   // { type: "NMS",     page: "http://localhost:8000/api/streams/live/feed1" },
 
@@ -189,6 +185,10 @@ const servers = [
 
   // OpenRTMP öffentliche Stats; key = Stats-Key, KEIN Admin-API-Token
   // { type: "OpenRTMP", page: "http://127.0.0.1:8081/stats", key: "sts_your_stats_key", show_rtt: true },
+
+  // RIST StatsServer (moo-the-cow): nativ 8081, Docker 8683 (WebSocket)
+  // { type: "RIST", page: "ws://127.0.0.1:8683", show_rtt: true,
+  //   peer_display: "details", max_peers: 4 },
 
   // Node-Media-Server
   // { type: "NMS",     page: "http://localhost:8000/api/streams/live/feed1" },
