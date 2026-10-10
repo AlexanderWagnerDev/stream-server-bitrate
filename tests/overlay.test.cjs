@@ -43,6 +43,7 @@ function createHarness(href = 'http://localhost/overlay.html', embedded = null) 
   const overlay = new Element();
   const urls = [];
   let result = { ok: false };
+  let bodyTimeoutActive = false;
 
   const document = {
     body: new Element(),
@@ -57,8 +58,8 @@ function createHarness(href = 'http://localhost/overlay.html', embedded = null) 
     window: { location: { href } },
     URL,
     AbortController,
-    clearTimeout() {},
-    setTimeout() { return 1; },
+    clearTimeout() { bodyTimeoutActive = false; },
+    setTimeout() { bodyTimeoutActive = true; return 1; },
     async fetch(url) {
       urls.push(url);
       return result;
@@ -71,7 +72,7 @@ function createHarness(href = 'http://localhost/overlay.html', embedded = null) 
     'const EMBEDDED_SETTINGS = ' + JSON.stringify(embedded) + '; // GENERATED_OVERLAY_SETTINGS',
   ) : script;
   vm.runInContext(source + '\n' +
-    'globalThis.__test = { fetchOpenIRL, fetchOpenRTMP, fetchSRT, normalized, render, recordSample, history };', context);
+    'globalThis.__test = { fetchOpenIRL, fetchOpenRTMP, fetchSRT, fetchNGINX, normalized, render, recordSample, history };', context);
 
   return {
     api: context.__test,
@@ -79,6 +80,18 @@ function createHarness(href = 'http://localhost/overlay.html', embedded = null) 
     urls,
     respondJson(value) {
       result = { ok: true, async json() { return value; } };
+    },
+    respondJsonObserved(value, observer) {
+      result = { ok: true, async json() {
+        observer(bodyTimeoutActive);
+        return value;
+      } };
+    },
+    respondXml(doc) {
+      result = { ok: true, async text() { return '<rtmp />'; } };
+      context.DOMParser = class {
+        parseFromString() { return doc; }
+      };
     },
     respondOffline() {
       result = { ok: true, async json() { throw new SyntaxError('Stream offline'); } };
@@ -247,4 +260,55 @@ test('generator template is replaceable and GitHub Pages builder has safe export
   assert.ok(generator.includes('fetch("./bitrate.html"'));
   assert.ok(generator.includes('bitrate-overlay-preview'));
   assert.ok(generator.includes('never sends your stream keys'));
+});
+
+test('body timeout remains active until JSON is completely read', async () => {
+  const h = createHarness();
+  let wasActive = false;
+  h.respondJsonObserved({ bitrate_kbps: 3100, rtt_ms: 15 }, active => {
+    wasActive = active;
+  });
+  const data = await h.api.fetchOpenRTMP({ page: 'http://host/stats', key: 'sts_test' });
+  assert.equal(data.bitrate, 3100);
+  assert.equal(wasActive, true);
+});
+
+test('NGINX selects a named application and skips publishing streams with zero bitrate', async () => {
+  const h = createHarness();
+  const stream = (bitrate, publishing = true) => ({
+    getElementsByTagName(name) {
+      if (name === 'publishing') return publishing ? [{}] : [];
+      if (name === 'bw_in') return [{ textContent: String(bitrate) }];
+      return [];
+    },
+  });
+  const app = (name, streams) => ({
+    children: [{ tagName: 'name', textContent: name }],
+    getElementsByTagName(nameTag) {
+      return nameTag === 'stream' ? streams : [];
+    },
+  });
+  h.respondXml({
+    getElementsByTagName(name) {
+      if (name === 'parsererror') return [];
+      if (name === 'application') return [
+        app('other', [stream(8000000)]),
+        app('live', [stream(0), stream(4900000)]),
+      ];
+      return [];
+    },
+  });
+  const data = await h.api.fetchNGINX({ page: 'http://host/stat', key: 'live' });
+  assert.equal(data.bitrate, 4900);
+  assert.equal(await h.api.fetchNGINX({ page: 'http://host/stat', key: 'missing' }), null);
+});
+
+test('OpenIRL URL handles many trailing slashes without regex backtracking', async () => {
+  const h = createHarness();
+  h.respondJson({ status: 'ok', publisher: { bitrate: 4000, rtt: 35 } });
+  const result = await h.api.fetchOpenIRL({
+    page: 'http://host/stats' + '/'.repeat(2000), key: 'stream/with slash',
+  });
+  assert.equal(result.bitrate, 4000);
+  assert.ok(h.urls.at(-1).endsWith('/stats/stream%2Fwith%20slash'));
 });
