@@ -3,7 +3,7 @@
 [![GitHub License](https://img.shields.io/github/license/AlexanderWagnerDev/stream-server-bitrate?style=flat-square)](https://github.com/AlexanderWagnerDev/stream-server-bitrate/blob/main/LICENSE)
 [![HTML](https://img.shields.io/badge/HTML-orange?style=flat-square&logo=html5&logoColor=white)](bitrate.html)
 
-A lightweight, transparent HTML overlay that displays live bitrate and RTT with color-coded status — compatible with SRT-Live-Server, OpenIRL SRT/SRTLA, **OpenRTMP**, Node-Media-Server, and nginx-rtmp. Supports multiple servers with automatic fallback. The single-file OBS overlay remains the main feature; additional designs and charts are optional.
+A lightweight, transparent HTML overlay that displays live bitrate and RTT with color-coded status — compatible with SRT-Live-Server, OpenIRL SRT/SRTLA, **OpenRTMP**, RIST, Node-Media-Server, and nginx-rtmp. Supports multiple servers with automatic fallback. The single-file OBS overlay remains the main feature; additional designs and charts are optional.
 
 ---
 
@@ -12,7 +12,7 @@ A lightweight, transparent HTML overlay that displays live bitrate and RTT with 
 - 🟢 **Color-coded status** — green / orange / red for both bitrate and RTT
 - 📡 **Multi-server support** — define multiple servers, the first responding one is used
 - 🔄 **Automatic fallback** — if the primary server is unavailable, the next is tried
-- 🎛️ **Five server types supported:** SRT-Live-Server, OpenIRL SRT/SRTLA, **OpenRTMP**, Node-Media-Server (NMS), nginx-rtmp
+- 🎛️ **Six server types supported:** SRT-Live-Server, OpenIRL SRT/SRTLA, **OpenRTMP**, RIST, Node-Media-Server (NMS), nginx-rtmp
 - 🎨 **Optional designs & widgets** — 12 visual presets, customizable labels/layouts, optional bitrate and RTT graphs
 - 🪟 **Transparent background** — designed for OBS browser source overlays
 - ⚙️ **No dependencies** — single HTML file, no build tools required
@@ -57,6 +57,15 @@ const servers = [
   // OpenRTMP public per-stream stats; key = stats_key, NOT an admin API token
   // { type: "OpenRTMP", page: "http://127.0.0.1:8081/stats", key: "sts_your_stats_key", show_rtt: true },
 
+  // RIST stats (moo-the-cow hosting): native = ws://127.0.0.1:8081
+  // Docker Compose publishes the stats WebSocket on port 8683
+  // { type: "RIST", page: "ws://127.0.0.1:8683", show_rtt: true,
+  //   peer_display: "details", max_peers: 4 },
+
+  // RIST StatsServer (moo-the-cow): nativ 8081, Docker 8683 (WebSocket)
+  // { type: "RIST", page: "ws://127.0.0.1:8683", show_rtt: true,
+  //   peer_display: "details", max_peers: 4 },
+
   // Node-Media-Server
   // { type: "NMS",     page: "http://localhost:8000/api/streams/live/feed1" },
   // { type: "NMS",     page: "http://admin:admin@localhost:8000/api/streams/live/feed1" },
@@ -73,6 +82,7 @@ const servers = [
 | `SRT`      | SRT-Live-Server `/stats` JSON endpoint                | `page`, `publisher` |
 | `OpenIRL`  | Modern OpenIRL SLS `/stats/<player_id>` for SRT & SRTLA | `page`, `key` | 
 | `OpenRTMP` | Public OpenRTMP `/stats?key=<stats_key>` JSON           | `page`, `key` |
+| `RIST`     | moo RIST StatsServer WebSocket; native 8081 / Docker 8683 | `page` |
 | `NMS`      | Node-Media-Server REST API                            | `page`              |
 | `NGINX`    | nginx-rtmp `/stat` XML endpoint                       | `page`, `key`       |
 
@@ -80,7 +90,7 @@ const servers = [
 
 | Option       | Type    | Description                                                  |
 |--------------|---------|--------------------------------------------------------------|
-| `type`       | string  | Server type: `"SRT"`, `"OpenIRL"`, `"OpenRTMP"`, `"NMS"`, `"NGINX"` |
+| `type`       | string  | Server type: `"SRT"`, `"OpenIRL"`, `"OpenRTMP"`, `"RIST"`, `"NMS"`, `"NGINX"` |
 | `page`       | string  | Base URL of the stats endpoint                               |
 | `publisher`  | string  | Stream key path (SRT only)                                   |
 | `key`        | string  | OpenIRL player ID, OpenRTMP stats key or NGINX application name |
@@ -88,8 +98,8 @@ const servers = [
 | `show_label` | boolean | Show a small server-type badge next to the value             |
 | `label`      | string  | Optional custom server label                                |
 | `show_throughput` | boolean | OpenIRL: display network throughput when available |
-| `peer_display` | string | OpenIRL SRTLA: `"off"`, `"count"` or `"details"` |
-| `max_peers` | number | Maximum OpenIRL SRTLA peer rows                              |
+| `peer_display` | string | OpenIRL SRTLA / RIST: `"off"`, `"count"` or `"details"` |
+| `max_peers` | number | Maximum SRTLA / RIST peer rows                              |
 
 ---
 
@@ -99,11 +109,11 @@ The **default `bitrate.html` stays transparent and uses the original compact lay
 
 - **12 presets:** `classic`, `minimal`, `pill`, `card`, `glass`, `neon`, `broadcast`, `terminal`, `outline`, `scoreboard`, `gradient`, `ticker`.
 - **Six layouts:** vertical, horizontal, compact, grid, split, dashboard.
-- Optional live bitrate/RTT history graphs, bitrate bar, stream status, uptime and OpenIRL SRTLA link count/bitrate/jitter when supplied by the server.
+- Optional live bitrate/RTT history graphs, bitrate bar, stream status, uptime and per-link SRTLA / RIST statistics when supplied by the server.
 - Customize label and status text, graph titles, link/jitter text, units, colors, fonts and spacing. Set a label to an empty string to hide it. The `display.labels` object owns these visible strings; the `display` object controls widgets and order.
 - See the [12-design comparison image](docs/theme-previews.svg) or open the [interactive theme gallery](examples/themes.html) locally.
 
-The bitrate color thresholds are based on kb/s even when the number is displayed in Mb/s. RTT color thresholds use milliseconds. Peer jitter is a separate metric, not per-peer RTT, and the server's aggregate SRTLA bitrate is never calculated by summing peers.
+The bitrate color thresholds are based on kb/s even when the number is displayed in Mb/s. RTT color thresholds use milliseconds. Peer jitter is a separate metric, not per-peer RTT. OpenIRL reports an aggregate SRTLA bitrate; RIST receiver stats instead provide per-peer bitrate in bit/s, which the adapter sums across active peers and converts to kb/s. RIST RTT is averaged over active peers.
 
 
 ---
@@ -127,7 +137,7 @@ Based on [b3ck/server-bitrate-html](https://github.com/b3ck/server-bitrate-html)
 
 # 📡 Stream Server Bitrate Overlay (Deutsch)
 
-Ein schlankes, **standardmäßig transparentes** HTML-Overlay, das Live-Bitrate und RTT farbkodiert anzeigt — kompatibel mit SRT-Live-Server, OpenIRL SRT/SRTLA, **OpenRTMP**, Node-Media-Server und nginx-rtmp. Mehrere Server mit automatischem Fallback. Das ursprüngliche Overlay bleibt das Hauptfeature; Designs und Graphen sind optionale Erweiterungen.
+Ein schlankes, **standardmäßig transparentes** HTML-Overlay, das Live-Bitrate und RTT farbkodiert anzeigt — kompatibel mit SRT-Live-Server, OpenIRL SRT/SRTLA, **OpenRTMP**, RIST, Node-Media-Server und nginx-rtmp. Mehrere Server mit automatischem Fallback. Das ursprüngliche Overlay bleibt das Hauptfeature; Designs und Graphen sind optionale Erweiterungen.
 
 ---
 
@@ -136,7 +146,7 @@ Ein schlankes, **standardmäßig transparentes** HTML-Overlay, das Live-Bitrate 
 - 🟢 **Farbkodierter Status** — Grün / Orange / Rot für Bitrate und RTT
 - 📡 **Multi-Server-Unterstützung** — mehrere Server eintragen, der erste antwortende wird verwendet
 - 🔄 **Automatischer Fallback** — bei Ausfall des primären Servers wird der nächste versucht
-- 🎛️ **Fünf Server-Typen unterstützt:** SRT-Live-Server, OpenIRL SRT/SRTLA, **OpenRTMP**, Node-Media-Server (NMS), nginx-rtmp
+- 🎛️ **Sechs Server-Typen unterstützt:** SRT-Live-Server, OpenIRL SRT/SRTLA, **OpenRTMP**, RIST, Node-Media-Server (NMS), nginx-rtmp
 - 🎨 **Optionale Designs & Widgets** — 12 Presets, einstellbare Texte/Layouts und Bitrate-/RTT-Verlaufsgrafen
 - 🪟 **Transparenter Hintergrund** — für OBS Browser-Source-Overlays konzipiert
 - ⚙️ **Keine Abhängigkeiten** — einzelne HTML-Datei, kein Build-Tool nötig
@@ -196,6 +206,7 @@ const servers = [
 | `SRT`      | SRT-Live-Server `/stats` JSON-Endpoint                    | `page`, `publisher` |
 | `OpenIRL`  | Modernes OpenIRL SLS `/stats/<player_id>` für SRT/SRTLA | `page`, `key` |
 | `OpenRTMP` | Öffentliche OpenRTMP-Stats `/stats?key=<stats_key>`     | `page`, `key` |
+| `RIST`     | moo RIST StatsServer WebSocket (nativ 8081 / Docker 8683) | `page` |
 | `NMS`      | Node-Media-Server REST API                                | `page`              |
 | `NGINX`    | nginx-rtmp `/stat` XML-Endpoint                           | `page`, `key`       |
 
@@ -205,7 +216,7 @@ const servers = [
 
 Die ursprüngliche `bitrate.html` bleibt **im Standard transparent**, kompakt und ohne zusätzliche Bibliotheken nutzbar. Optional gibt es zwölf Designs (`classic`, `minimal`, `pill`, `card`, `glass`, `neon`, `broadcast`, `terminal`, `outline`, `scoreboard`, `gradient`, `ticker`), sechs Layouts und einzeln aktivierbare Widgets.
 
-Bitrate- und RTT-Verlauf, Balken, Uptime, Status sowie SRTLA-Linkinformationen lassen sich ein-/ausblenden. **Alle sichtbaren Beschriftungen** – inklusive Einheiten, Jitter, Link-Texte, Diagrammtitel und Offline-/Online-Texte – sind über `display.labels` veränderbar. Ein leeres Label blendet den Text aus. [Designvergleich](docs/theme-previews.svg) · [Interaktive Vorschau](examples/themes.html).
+Bitrate- und RTT-Verlauf, Balken, Uptime, Status sowie SRTLA-/RIST-Linkinformationen lassen sich ein-/ausblenden. **Alle sichtbaren Beschriftungen** – inklusive Einheiten, Jitter, Link-Texte, Diagrammtitel und Offline-/Online-Texte – sind über `display.labels` veränderbar. Ein leeres Label blendet den Text aus. [Designvergleich](docs/theme-previews.svg) · [Interaktive Vorschau](examples/themes.html).
 
 
 ---
