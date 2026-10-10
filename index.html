@@ -467,7 +467,7 @@ $("download").addEventListener("click", async () => {
       .replaceAll("\u2028", String.raw`\u2028`).replaceAll("\u2029", String.raw`\u2029`);
     const exported = html.replaceAll(marker,
       "const EMBEDDED_SETTINGS = " + json + "; // GENERATED_OVERLAY_SETTINGS");
-    download(new Blob([exported], {type:"text/html;charset=utf-8"}), "stream-bitrate-obs.html");
+    download(new Blob([exported], {type:"text/html;charset=utf-8"}), "bitrate.html");
     report("Overlay downloaded. Set the matching width/height in OBS. Keep stats keys private.");
   } catch (error) {
     report("Export failed: " + error.message +

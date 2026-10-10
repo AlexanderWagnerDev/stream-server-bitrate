@@ -312,3 +312,15 @@ test('OpenIRL URL handles many trailing slashes without regex backtracking', asy
   assert.equal(result.bitrate, 4000);
   assert.ok(h.urls.at(-1).endsWith('/stats/stream%2Fwith%20slash'));
 });
+
+test('new filename is used in generator and all public entry points', () => {
+  const generator = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const gallery = fs.readFileSync(path.join(__dirname, '..', 'examples', 'themes.html'), 'utf8');
+  const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+  const pages = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'pages.yml'), 'utf8');
+  for (const content of [generator, gallery, readme, pages]) {
+    assert.doesNotMatch(content, /colorBitrate\.html/);
+    assert.match(content, /bitrate\.html/);
+  }
+  assert.match(generator, /"bitrate\.html"\);/);
+});
