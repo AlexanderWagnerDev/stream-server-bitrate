@@ -13,7 +13,7 @@ jobs:
   node-tests:
     name: Node.js overlay tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,3 +21,31 @@ jobs:
           node-version: '22'
       - name: Test adapters and rendering
         run: node --test tests/overlay.test.cjs
+
+      - name: Capture real browser screenshot of theme gallery
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p screenshots
+          if command -v google-chrome >/dev/null 2>&1; then
+            BROWSER="$(command -v google-chrome)"
+          elif command -v chromium >/dev/null 2>&1; then
+            BROWSER="$(command -v chromium)"
+          else
+            echo "::error::Chromium or Google Chrome not installed on runner"
+            exit 1
+          fi
+          "$BROWSER" --headless --disable-gpu --disable-dev-shm-usage \
+            --no-sandbox --hide-scrollbars --window-size=1280,2200 \
+            --virtual-time-budget=7000 \
+            --screenshot="$GITHUB_WORKSPACE/screenshots/theme-gallery.png" \
+            "file://$GITHUB_WORKSPACE/examples/themes.html"
+          test -s screenshots/theme-gallery.png
+
+      - name: Upload theme gallery screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-overlay-theme-screenshots
+          path: screenshots/theme-gallery.png
+          if-no-files-found: error
+          retention-days: 30
