@@ -68,11 +68,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 </head>
 <body>
 <header>
-  <div class="brand">STREAM SERVER BITRATE <small>OBS Overlay Builder · Free &amp; open source</small></div>
+  <div class="brand">STREAM SERVER BITRATE <small>OBS Bitrate Overlay · Optional design generator</small></div>
   <nav><a href="examples/themes.html">Theme gallery</a><a href="README.md">Docs</a><a href="https://github.com/AlexanderWagnerDev/stream-server-bitrate">GitHub</a></nav>
 </header>
 <main>
-<h1>Build your streaming overlay.</h1>
+<h1>Optional overlay generator</h1>
 <p class="lead">Choose the data, widgets, arrangement, graphs and styling. The preview uses synthetic metrics and never contacts your stats servers. Export a <strong>single, ready-to-use HTML file</strong> for the OBS Browser Source.</p>
 <div class="layout">
 <div class="sidebar">
@@ -97,7 +97,32 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   </fieldset>
 
   <fieldset>
-    <legend>3 · Layout &amp; appearance</legend>
+    <legend>3 · Text labels &amp; language</legend>
+    <p class="hint">Every visible metric label can be renamed, translated, or hidden by leaving its field empty. Numbers remain live; no text is baked into the design.</p>
+    <div class="fields" id="text-labels">
+      <label>Bitrate label<input maxlength="100" data-setting="display.labels.bitrate"></label>
+      <label>RTT label<input maxlength="100" data-setting="display.labels.rtt"></label>
+      <label>Network throughput label<input maxlength="100" data-setting="display.labels.throughput"></label>
+      <label>SRTLA connections label<input maxlength="100" data-setting="display.labels.peers"></label>
+      <label>Link prefix (e.g. LINK 1)<input maxlength="100" data-setting="display.labels.link"></label>
+      <label>Jitter suffix<input maxlength="100" data-setting="display.labels.jitter"></label>
+      <label>Uptime label<input maxlength="100" data-setting="display.labels.uptime"></label>
+      <label>Status label<input maxlength="100" data-setting="display.labels.status"></label>
+      <label>Online status text<input maxlength="100" data-setting="display.labels.live"></label>
+      <label>Offline status text<input maxlength="100" data-setting="display.labels.offline"></label>
+      <label>Bitrate graph title<input maxlength="100" data-setting="display.labels.bitrate_graph"></label>
+      <label>RTT graph title<input maxlength="100" data-setting="display.labels.rtt_graph"></label>
+      <label>Bitrate bar title<input maxlength="100" data-setting="display.labels.bitrate_bar"></label>
+      <label>Single link suffix<input maxlength="100" data-setting="display.labels.links_singular"></label>
+      <label>Multiple links suffix<input maxlength="100" data-setting="display.labels.links_plural"></label>
+      <label>Bitrate unit (kb/s)<input maxlength="100" data-setting="display.labels.kbps"></label>
+      <label>Bitrate unit (Mb/s)<input maxlength="100" data-setting="display.labels.mbps"></label>
+      <label>Latency/jitter unit<input maxlength="100" data-setting="display.labels.ms"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>4 · Layout &amp; appearance</legend>
     <div class="fields">
       <label>Arrangement
         <select data-setting="design.layout">
@@ -155,7 +180,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   </fieldset>
 
   <fieldset>
-    <legend>4 · Graphs, history &amp; bitrate bar</legend>
+    <legend>5 · Graphs, history &amp; bitrate bar</legend>
     <div class="fields">
       <label>History samples<input type="number" min="5" max="600" data-setting="display.history_points"></label>
       <label>Graph width (px)<input type="number" min="120" max="960" data-setting="display.graph_width"></label>
@@ -174,7 +199,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   </fieldset>
 
   <fieldset>
-    <legend>5 · Status thresholds &amp; OBS size</legend>
+    <legend>6 · Status thresholds &amp; OBS size</legend>
     <div class="fields">
       <label>Bitrate warning ≤ (kb/s)<input type="number" min="0" data-setting="thresholds.bitrate_orange"></label>
       <label>Bitrate red ≤ (kb/s)<input type="number" min="0" data-setting="thresholds.bitrate_red"></label>
@@ -187,13 +212,13 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 </div>
 <div class="preview-col">
   <section class="preview-card">
-    <div class="preview-head"><strong>Live design preview</strong><span>DEMO DATA · NO NETWORK REQUESTS</span></div>
+    <div class="preview-head"><strong>Overlay preview</strong><span>SAMPLE DATA · NO NETWORK REQUESTS</span></div>
     <div class="preview-stage">
       <iframe id="preview" src="bitrate.html?demo=1&amp;srtla=1" title="Live preview of the current overlay settings"></iframe>
     </div>
-    <div class="preview-foot">The checkerboard imitates transparent OBS content. Metrics, bitrate graphs and SRTLA links are sample values. The exported HTML uses your configured server endpoints.</div>
+    <div class="preview-foot">The checkered canvas demonstrates transparent backgrounds. Sample metrics never contact your server. Customize every label above, or leave it blank to hide it.</div>
   </section>
-  <div class="notice"><strong>Local-only configuration.</strong> The builder never sends your stream keys to the preview iframe, GitHub, or any server. The downloadable HTML embeds your settings and may contain a private stats key. Keep exported files private. OBS must be able to access your server and respect CORS/HTTPS rules.</div>
+  <div class="notice"><strong>Optional convenience tool.</strong> Configure bitrate.html manually if preferred. <strong>Local-only configuration:</strong> The builder never sends your stream keys to the preview iframe, GitHub, or any server. The downloadable HTML embeds your settings and may contain a private stats key. Keep exported files private. OBS must be able to access your server and respect CORS/HTTPS rules.</div>
   <div class="actions">
     <button id="download" class="primary" type="button">Download OBS overlay (.html)</button>
     <button id="exportJson" type="button">Export settings (.json)</button>
@@ -218,14 +243,14 @@ const defaults = {
     show_throughput: false, peer_display: "off", max_peers: 4,
   }],
   design: {
-    preset: "glass", layout: "dashboard", align: "left",
+    preset: "classic", layout: "vertical", align: "right",
     font_family: "'Segoe UI', 'Inter', system-ui, sans-serif",
     font_size: 22, label_size: 11, font_weight: 700, gap: 8,
     padding: "8px 10px", row_padding: "6px 12px", corner_radius: 13,
     border_width: 1, indicator_size: 8, indicator_style: "dot",
     letter_spacing: 0, accent_color: "#38bdf8",
-    background: "rgba(12, 18, 30, 0.82)", border_color: "rgba(255, 255, 255, 0.15)",
-    text_shadow: true, show_dot: true, show_bitrate_label: true,
+    background: "transparent", border_color: "rgba(255, 255, 255, 0.15)",
+    text_shadow: true, show_dot: true, show_bitrate_label: false,
     show_units: true, bitrate_unit: "kb/s", mbps_decimals: 2,
     offline_text: "NO SIGNAL",
     colors: { green: "#4ade80", orange: "#fb923c", red: "#f87171",
@@ -233,9 +258,17 @@ const defaults = {
   },
   thresholds: {bitrate_orange: 2500, bitrate_red: 1200, rtt_orange: 120, rtt_red: 250},
   display: {
-    bitrate: true, rtt: true, throughput: false, peers: true, uptime: true,
-    status: true, graph: true, rtt_graph: false, bitrate_bar: true,
-    title: "STREAM HEALTH",
+    bitrate: true, rtt: true, throughput: false, peers: false, uptime: false,
+    status: false, graph: false, rtt_graph: false, bitrate_bar: false,
+    title: "",
+    labels: {
+      bitrate: "BITRATE", rtt: "RTT", throughput: "NETWORK",
+      peers: "SRTLA", link: "LINK", jitter: "jitter",
+      uptime: "UPTIME", status: "STATUS", live: "LIVE", offline: "OFFLINE",
+      bitrate_graph: "BITRATE HISTORY", rtt_graph: "RTT HISTORY",
+      bitrate_bar: "BITRATE LEVEL", links_singular: "link", links_plural: "links",
+      kbps: "kb/s", mbps: "Mb/s", ms: "ms",
+    },
     history_points: 60, graph_width: 390, graph_height: 108,
     graph_max: 0, graph_line_width: 2, graph_color: "accent",
     graph_fill: true, graph_grid: true, bar_max: 6000, bar_height: 10,
@@ -497,6 +530,7 @@ $("importFile").addEventListener("change", async event => {
     copyFields(safe.design.colors, cfg.design?.colors);
     copyFields(safe.thresholds, cfg.thresholds);
     copyFields(safe.display, cfg.display);
+    copyFields(safe.display.labels, cfg.display?.labels);
     if (Array.isArray(cfg.display?.order)) {
       safe.display.order = [...new Set(cfg.display.order.filter(k => Object.hasOwn(allowedWidgets, k)))];
       for (const k of Object.keys(allowedWidgets)) if (!safe.display.order.includes(k)) safe.display.order.push(k);
