@@ -217,6 +217,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
       <iframe id="preview" src="bitrate.html?demo=1&amp;srtla=1" title="Live preview of the current overlay settings"></iframe>
     </div>
     <div class="preview-foot">The checkered canvas demonstrates transparent backgrounds. Sample metrics never contact your server. Customize every label above, or leave it blank to hide it.</div>
+    <output id="sizeWarning" aria-live="polite" class="preview-foot"></output>
   </section>
   <div class="notice"><strong>Optional convenience tool.</strong> Configure bitrate.html manually if preferred. <strong>Local-only configuration:</strong> The builder never sends your stream keys to the preview iframe, GitHub, or any server. The downloadable HTML embeds your settings and may contain a private stats key. Keep exported files private. OBS must be able to access your server and respect CORS/HTTPS rules.</div>
   <div class="actions">
@@ -411,6 +412,26 @@ function syncPreview() {
   const settings = {design: state.design, display: state.display, thresholds: state.thresholds};
   iframe.contentWindow.postMessage({type:"bitrate-overlay-preview", settings},
     window.location.origin === "null" ? "*" : window.location.origin);
+  // Keep the live preview fully visible even if custom text wraps into more lines.
+  setTimeout(() => checkPreviewSize(h), 100);
+}
+function checkPreviewSize(requestedHeight) {
+  const frame = $("preview");
+  try {
+    const content = frame.contentDocument?.getElementById("overlay");
+    if (!content) return;
+    const bounds = content.getBoundingClientRect();
+    const requiredHeight = Math.ceil(bounds.bottom + 18);
+    const height = Math.max(requestedHeight, requiredHeight);
+    frame.style.height = height + "px";
+    $("sizeWarning").textContent = requiredHeight > requestedHeight
+      ? "The chosen content needs at least " + requiredHeight +
+        "px in height. The preview was expanded to prevent clipping; use that height or larger in OBS."
+      : "";
+  } catch {
+    // The generator also works if the browser prevents iframe measurements.
+    $("sizeWarning").textContent = "";
+  }
 }
 $("preview").addEventListener("load", syncPreview);
 document.addEventListener("input", event => {
