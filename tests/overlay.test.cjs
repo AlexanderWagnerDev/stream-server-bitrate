@@ -324,3 +324,60 @@ test('new filename is used in generator and all public entry points', () => {
   }
   assert.match(generator, /"bitrate\.html"\);/);
 });
+
+test('every visible metric label can be customized or emptied without changing numbers', () => {
+  const h = createHarness('http://localhost/overlay.html', {
+    design: { show_bitrate_label: true, show_units: true },
+    display: {
+      graph: true, rtt_graph: true, bitrate_bar: true,
+      peers: true, throughput: true, uptime: true, status: true,
+      labels: {
+        bitrate: 'My bitrate', rtt: 'Latency', throughput: 'Network speed',
+        peers: 'Connections', link: 'Path', jitter: 'variation',
+        uptime: 'Duration', status: 'Stream state', live: 'Connected',
+        bitrate_graph: 'Chart 1', rtt_graph: 'Chart 2',
+        bitrate_bar: 'Loading', links_plural: 'connections',
+        kbps: 'kilobits', ms: 'milliseconds',
+      },
+    },
+  });
+  const rows = [
+    {
+      bitrate: 3400, rtt: 31, throughput: 3500, uptime: 123,
+      peers: [{ bitrate: 2100, jitter: 2.3 }, { bitrate: 1300, jitter: 1.2 }],
+    },
+  ];
+  h.api.render({ data: rows[0], server: {
+    type: 'OpenIRL', show_rtt: true, show_label: false, show_throughput: true,
+    peer_display: 'details', max_peers: 2,
+  } });
+  const content = [];
+  const collect = el => {
+    if (el.textContent) content.push(el.textContent);
+    el.children.forEach(collect);
+  };
+  h.overlay.children.forEach(collect);
+  const combined = content.join(' ');
+  for (const text of ['My bitrate', 'Latency', 'Network speed', 'Connections',
+    'Path 1', 'variation', 'Duration', 'Stream state', 'Connected', 'Chart 1',
+    'Chart 2', 'Loading', 'kilobits', 'milliseconds']) {
+    assert.ok(combined.includes(text), 'missing customizable label: ' + text);
+  }
+  assert.ok(!combined.includes('ms jitter'), 'hardcoded jitter text must not leak');
+});
+
+test('default original overlay is classic and has no graphs or background panel', () => {
+  const h = createHarness('http://localhost/overlay.html?demo=1');
+  assert.match(h.overlay.className, /preset-classic/);
+  assert.ok(!h.overlay.children.some(element => element.className === 'chart'));
+  const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(index, /preset: "classic", layout: "vertical"/);
+  assert.match(index, /background: "transparent"/);
+});
+
+test('responsive CSS wraps metric text and keeps the demo background separate', () => {
+  assert.match(html, /overflow-wrap: anywhere/);
+  assert.match(html, /flex-wrap: wrap/);
+  assert.match(html, /body\.demo-mode/);
+  assert.match(html, /background: transparent/);
+});
