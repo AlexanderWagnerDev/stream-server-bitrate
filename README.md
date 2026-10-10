@@ -68,7 +68,6 @@ const servers = [
 
   // Node-Media-Server
   // { type: "NMS",     page: "http://localhost:8000/api/streams/live/feed1" },
-  // { type: "NMS",     page: "http://admin:admin@localhost:8000/api/streams/live/feed1" },
 
   // nginx-rtmp
   // { type: "NGINX",   page: "http://localhost/stat",        key: "live" },

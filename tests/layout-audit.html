@@ -56,7 +56,24 @@ async function runAudit() {
       settings: settings(item.preset, item.layout),
     }, location.origin);
   }
-  await new Promise(resolve => setTimeout(resolve, 700));
+  // Wait until each iframe has applied the appearance message, not for an
+  // arbitrary delay that might pass before the overlay finishes rendering.
+  const applied = ({ frame, item }) => {
+    const overlay = frame.contentDocument?.getElementById("overlay");
+    return overlay?.classList.contains("preset-" + item.preset) &&
+      overlay.classList.contains("layout-" + item.layout) &&
+      overlay.querySelector(".overlay-title")?.textContent ===
+        "A long overlay title that needs to wrap to fit";
+  };
+  const deadline = Date.now() + 9000;
+  while (!frames.every(applied)) {
+    if (Date.now() > deadline) {
+      const missing = frames.filter(item => !applied(item))
+        .map(({ item }) => item.preset + "/" + item.layout);
+      throw new Error("Overlay preview did not update: " + missing.join(", "));
+    }
+    await new Promise(resolve => setTimeout(resolve, 40));
+  }
   for (const { frame, item } of frames) {
     const doc = frame.contentDocument;
     const overlay = doc.getElementById("overlay");
@@ -72,6 +89,13 @@ async function runAudit() {
       if (rect.right > limit || rect.left < root.left - 2) {
         failures.push(item.preset + "/" + item.layout + ": overflow " +
           element.className + " at " + rect.right.toFixed(1) + " > " + limit.toFixed(1));
+      }
+      // A box may fit while long text inside it is clipped or scrollable.
+      if (element.matches(".label, .value, .chart-label, .overlay-title") &&
+          element.scrollWidth > element.clientWidth + 1) {
+        failures.push(item.preset + "/" + item.layout + ": clipped text in " +
+          element.className + " (" + element.scrollWidth + " > " +
+          element.clientWidth + ")");
       }
     }
     frame.remove();

@@ -500,3 +500,18 @@ test('RIST offline stats immediately try the next configured server', async () =
   assert.equal(again.server.type, 'OpenRTMP');
   assert.equal(h.sockets.length, 1);
 });
+
+test('GitHub Pages deploys README updates and README server examples are valid', () => {
+  const workflow = fs.readFileSync(
+    path.join(__dirname, '..', '.github', 'workflows', 'pages.yml'), 'utf8');
+  const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+  assert.match(workflow, /push:\s*\n\s*branches: \[main\][\s\S]*?paths:[\s\S]*?- "README\.md"/);
+  assert.doesNotMatch(readme, /https?:\/\/[^/\s:]+:[^@/\s]+@/);
+  const englishConfig = readme.split('## ⚙️ Configuration')[1].split('### Server Types')[0];
+  const germanConfig = readme.split('## ⚙️ Konfiguration')[1].split('### Server-Typen')[0];
+  for (const [language, example] of [['English', englishConfig], ['German', germanConfig]]) {
+    assert.equal((example.match(/type: "RIST"/g) || []).length, 1,
+      language + ' configuration has exactly one RIST example');
+    assert.match(example, /type: "NMS"/);
+  }
+});

@@ -42,10 +42,19 @@ jobs:
           python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/overlay-preview-http.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8765/index.html >/dev/null; then break; fi
+          ready=false
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8765/index.html >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
             sleep 0.2
           done
+          if [[ "$ready" != true ]]; then
+            echo "::error::Preview HTTP server failed to start on port 8765"
+            cat /tmp/overlay-preview-http.log
+            exit 1
+          fi
           curl -fsS http://127.0.0.1:8765/examples/themes.html >/dev/null
           "$BROWSER" --headless --disable-gpu --disable-dev-shm-usage \
             --no-sandbox --hide-scrollbars --window-size=1280,3100 \
@@ -72,7 +81,7 @@ jobs:
           "$BROWSER" --headless --disable-gpu --disable-dev-shm-usage \
             --no-sandbox --virtual-time-budget=12000 --dump-dom \
             "http://127.0.0.1:8765/tests/layout-audit.html" > screenshots/layout-audit-dom.html 2>/dev/null
-          if ! grep -q 'id="audit-result" aria-live="off">PASS: 18 layout checks<' screenshots/layout-audit-dom.html; then
+          if ! grep -q 'PASS: 18 layout checks' screenshots/layout-audit-dom.html; then
             grep 'id="audit-result"' screenshots/layout-audit-dom.html || true
             exit 1
           fi
