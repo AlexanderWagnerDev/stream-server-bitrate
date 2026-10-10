@@ -39,70 +39,93 @@ const settings = (preset, layout) => ({
     title: "A long overlay title that needs to wrap to fit",
   },
 });
-async function runAudit() {
-  const failures = [];
-  const frames = await Promise.all(cases.map(item => new Promise(resolve => {
-    const frame = document.createElement("iframe");
-    frame.width = item.width;
-    frame.height = 1200;
-    frame.style.cssText = "position:absolute;left:-10000px;top:0;visibility:hidden";
-    frame.src = "../bitrate.html?demo=1&srtla=1";
-    frame.addEventListener("load", () => resolve({ frame, item }), { once: true });
-    document.body.appendChild(frame);
-  })));
-  for (const { frame, item } of frames) {
-    frame.contentWindow.postMessage({
-      type: "bitrate-overlay-preview",
-      settings: settings(item.preset, item.layout),
-    }, location.origin);
-  }
-  // Wait until each iframe has applied the appearance message, not for an
-  // arbitrary delay that might pass before the overlay finishes rendering.
-  const applied = ({ frame, item }) => {
-    const overlay = frame.contentDocument?.getElementById("overlay");
-    return overlay?.classList.contains("preset-" + item.preset) &&
-      overlay.classList.contains("layout-" + item.layout) &&
-      overlay.querySelector(".overlay-title")?.textContent ===
-        "A long overlay title that needs to wrap to fit";
-  };
+const createPreview = item => new Promise(resolve => {
+  const frame = document.createElement("iframe");
+  frame.width = item.width;
+  frame.height = 1200;
+  frame.style.cssText = "position:absolute;left:-10000px;top:0;visibility:hidden";
+  frame.src = "../bitrate.html?demo=1&srtla=1";
+  frame.addEventListener("load", () => resolve({ frame, item }), { once: true });
+  document.body.appendChild(frame);
+});
+
+const applyPreview = ({ frame, item }) => {
+  frame.contentWindow.postMessage({
+    type: "bitrate-overlay-preview",
+    settings: settings(item.preset, item.layout),
+  }, location.origin);
+};
+
+const previewApplied = ({ frame, item }) => {
+  const overlay = frame.contentDocument?.getElementById("overlay");
+  return overlay?.classList.contains("preset-" + item.preset) &&
+    overlay.classList.contains("layout-" + item.layout) &&
+    overlay.querySelector(".overlay-title")?.textContent ===
+      "A long overlay title that needs to wrap to fit";
+};
+
+// Resolve only after all previews have applied their appearance settings.
+// A scheduled retry avoids await-in-loop and handles slower CI browsers.
+const waitForPreviews = frames => new Promise((resolve, reject) => {
   const deadline = Date.now() + 9000;
-  while (!frames.every(applied)) {
+  const check = () => {
+    if (frames.every(previewApplied)) {
+      resolve();
+      return;
+    }
     if (Date.now() > deadline) {
-      const missing = frames.filter(item => !applied(item))
+      const missing = frames.filter(frame => !previewApplied(frame))
         .map(({ item }) => item.preset + "/" + item.layout);
-      throw new Error("Overlay preview did not update: " + missing.join(", "));
+      reject(new Error("Overlay preview did not update: " + missing.join(", ")));
+      return;
     }
-    await new Promise(resolve => setTimeout(resolve, 40));
+    setTimeout(check, 40);
+  };
+  check();
+});
+
+const auditElement = (element, root, doc, label) => {
+  const failures = [];
+  const rect = element.getBoundingClientRect();
+  const limit = Math.min(root.right + 2, doc.documentElement.clientWidth + 2);
+  if (rect.right > limit || rect.left < root.left - 2) {
+    failures.push(label + ": overflow " + element.className +
+      " at " + rect.right.toFixed(1) + " > " + limit.toFixed(1));
   }
-  for (const { frame, item } of frames) {
-    const doc = frame.contentDocument;
-    const overlay = doc.getElementById("overlay");
-    const root = overlay.getBoundingClientRect();
-    const children = overlay.querySelectorAll(
-      ".row, .chart, .bar-widget, .label, .value, .chart-label, .overlay-title"
-    );
-    const checked = [...children];
-    if (!checked.length) failures.push(item.preset + "/" + item.layout + ": no widgets");
-    for (const element of checked) {
-      const rect = element.getBoundingClientRect();
-      const limit = Math.min(root.right + 2, doc.documentElement.clientWidth + 2);
-      if (rect.right > limit || rect.left < root.left - 2) {
-        failures.push(item.preset + "/" + item.layout + ": overflow " +
-          element.className + " at " + rect.right.toFixed(1) + " > " + limit.toFixed(1));
-      }
-      // A box may fit while long text inside it is clipped or scrollable.
-      if (element.matches(".label, .value, .chart-label, .overlay-title") &&
-          element.scrollWidth > element.clientWidth + 1) {
-        failures.push(item.preset + "/" + item.layout + ": clipped text in " +
-          element.className + " (" + element.scrollWidth + " > " +
-          element.clientWidth + ")");
-      }
-    }
-    frame.remove();
+  // A box may fit while long text inside it is clipped or scrollable.
+  if (element.matches(".label, .value, .chart-label, .overlay-title") &&
+      element.scrollWidth > element.clientWidth + 1) {
+    failures.push(label + ": clipped text in " + element.className +
+      " (" + element.scrollWidth + " > " + element.clientWidth + ")");
   }
-  const output = document.getElementById("audit-result");
-  output.textContent = failures.length ? "FAIL " + failures.join("; ") : "PASS: 18 layout checks";
+  return failures;
+};
+
+const auditFrame = ({ frame, item }) => {
+  const doc = frame.contentDocument;
+  const overlay = doc.getElementById("overlay");
+  const root = overlay.getBoundingClientRect();
+  const checked = [...overlay.querySelectorAll(
+    ".row, .chart, .bar-widget, .label, .value, .chart-label, .overlay-title"
+  )];
+  const label = item.preset + "/" + item.layout;
+  if (!checked.length) return [label + ": no widgets"];
+  return checked.flatMap(element => auditElement(element, root, doc, label));
+};
+
+async function runAudit() {
+  const frames = await Promise.all(cases.map(createPreview));
+  try {
+    frames.forEach(applyPreview);
+    await waitForPreviews(frames);
+    const failures = frames.flatMap(auditFrame);
+    const output = document.getElementById("audit-result");
+    output.textContent = failures.length ? "FAIL " + failures.join("; ") : "PASS: 18 layout checks";
+  } finally {
+    frames.forEach(({ frame }) => frame.remove());
+  }
 }
+
 try {
   await runAudit();
 } catch (error) {
