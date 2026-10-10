@@ -24,7 +24,7 @@ jobs:
       - name: Test adapters and rendering
         run: node --test tests/overlay.test.cjs
 
-      - name: Capture real browser screenshot of theme gallery
+      - name: Capture actual overlay previews in Chrome over HTTP
         shell: bash
         run: |
           set -euo pipefail
@@ -37,21 +37,31 @@ jobs:
             echo "::error::Chromium or Google Chrome not installed on runner"
             exit 1
           fi
+          # Serve via HTTP rather than file://, so iframe postMessage and
+          # cross-origin rules match GitHub Pages, and transparent previews render.
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/overlay-preview-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8765/index.html >/dev/null; then break; fi
+            sleep 0.2
+          done
+          curl -fsS http://127.0.0.1:8765/examples/themes.html >/dev/null
           "$BROWSER" --headless --disable-gpu --disable-dev-shm-usage \
-            --no-sandbox --hide-scrollbars --window-size=1280,2200 \
-            --virtual-time-budget=7000 \
+            --no-sandbox --hide-scrollbars --window-size=1280,3100 \
+            --virtual-time-budget=8000 \
             --screenshot="$GITHUB_WORKSPACE/screenshots/theme-gallery.png" \
-            "file://$GITHUB_WORKSPACE/examples/themes.html"
+            "http://127.0.0.1:8765/examples/themes.html"
           test -s screenshots/theme-gallery.png
           "$BROWSER" --headless --disable-gpu --disable-dev-shm-usage \
-            --no-sandbox --hide-scrollbars --window-size=1440,2200 \
-            --virtual-time-budget=8000 \
+            --no-sandbox --hide-scrollbars --window-size=1440,2600 \
+            --virtual-time-budget=9000 \
             --screenshot="$GITHUB_WORKSPACE/screenshots/overlay-builder.png" \
-            "file://$GITHUB_WORKSPACE/index.html"
+            "http://127.0.0.1:8765/index.html"
           test -s screenshots/overlay-builder.png
           "$BROWSER" --headless --disable-gpu --disable-dev-shm-usage \
             --no-sandbox --virtual-time-budget=5000 --dump-dom \
-            "file://$GITHUB_WORKSPACE/index.html" > screenshots/builder-dom.html 2>/dev/null
+            "http://127.0.0.1:8765/index.html" > screenshots/builder-dom.html 2>/dev/null
           grep -q 'data-server="0"' screenshots/builder-dom.html
           grep -q 'data-widget="graph"' screenshots/builder-dom.html
           rm screenshots/builder-dom.html
