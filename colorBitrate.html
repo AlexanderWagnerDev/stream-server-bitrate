@@ -214,7 +214,7 @@
         const response = await tryFetch(openIRLUrl(server));
         if (!response) return null;
         const data = await response.json();
-        if (data.status !== "ok" || !data.publisher) return null;
+        if (!data.publisher || (data.status && data.status !== "ok")) return null;
 
         // OpenIRL modern stats expose the same aggregate fields for SRT and SRTLA.
         // Only SRTLA returns publisher.peers (per-link bitrate/throughput/jitter).
