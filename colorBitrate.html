@@ -19,6 +19,11 @@
       --surface: rgba(12, 18, 30, 0.82);
       --border: rgba(255, 255, 255, 0.15);
       --shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+      --accent: #38bdf8;
+      --row-padding: 6px 12px;
+      --border-width: 1px;
+      --indicator-size: 8px;
+      --value-spacing: 0px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -48,6 +53,7 @@
       gap: 5px;
       font-size: var(--font-size);
       font-weight: var(--font-weight);
+      letter-spacing: var(--value-spacing);
       line-height: 1.2;
       white-space: nowrap;
       text-shadow: var(--shadow);
@@ -61,8 +67,8 @@
     }
     .dot {
       display: inline-block;
-      width: 8px;
-      height: 8px;
+      width: var(--indicator-size);
+      height: var(--indicator-size);
       border-radius: 50%;
       background: currentColor;
       opacity: 0.85;
@@ -79,20 +85,108 @@
       font-size: calc(var(--font-size) * 0.58);
       font-weight: 600;
     }
+    #overlay.indicator-square .dot { border-radius: 2px; }
+    #overlay.indicator-bar .dot { width: 4px; height: calc(var(--font-size) * 0.85); border-radius: 2px; }
+    #overlay.indicator-none .dot { display: none; }
+
     #overlay.preset-pill .row {
-      padding: 6px 12px;
-      border: 1px solid var(--border);
+      padding: var(--row-padding);
+      border: var(--border-width) solid var(--border);
       border-radius: var(--radius);
       background: var(--surface);
     }
     #overlay.preset-card {
       padding: 12px 16px;
-      border: 1px solid var(--border);
+      border: var(--border-width) solid var(--border);
       border-radius: var(--radius);
       background: var(--surface);
     }
     #overlay.preset-minimal .dot { display: none; }
     #overlay.preset-minimal .row { gap: 4px; }
+
+    /* Glass: translucent surface with optional backdrop blur. */
+    #overlay.preset-glass {
+      padding: 13px 17px;
+      border: var(--border-width) solid rgba(255, 255, 255, 0.3);
+      border-radius: var(--radius);
+      background: var(--surface);
+      -webkit-backdrop-filter: blur(14px) saturate(145%);
+      backdrop-filter: blur(14px) saturate(145%);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.22), inset 0 1px rgba(255, 255, 255, 0.16);
+    }
+    /* Neon: accent outline with status-driven value glow. */
+    #overlay.preset-neon {
+      padding: 11px 16px;
+      border: var(--border-width) solid var(--accent);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 0 0 16px var(--accent), inset 0 0 12px rgba(0, 0, 0, 0.25);
+    }
+    #overlay.preset-neon .row { text-shadow: 0 0 9px currentColor; }
+    #overlay.preset-neon .dot { box-shadow: 0 0 9px currentColor; }
+    /* Broadcast: clear, rectangular live-show lower third. */
+    #overlay.preset-broadcast {
+      padding: 9px 14px;
+      border-left: 5px solid var(--accent);
+      border-radius: 3px;
+      background: var(--surface);
+      box-shadow: 0 5px 12px rgba(0, 0, 0, 0.22);
+    }
+    #overlay.preset-broadcast .row + .row { border-top: 1px solid var(--border); padding-top: 7px; }
+    #overlay.preset-broadcast.layout-horizontal .row + .row { border-top: 0; border-left: 1px solid var(--border); padding: 0 0 0 12px; }
+    #overlay.preset-broadcast .label { color: var(--accent); }
+    /* Terminal: monospaced console panel, no rounded edges. */
+    #overlay.preset-terminal {
+      font-family: Consolas, 'Courier New', monospace;
+      padding: 10px 14px;
+      border: var(--border-width) solid var(--accent);
+      border-radius: 0;
+      background: var(--surface);
+    }
+    #overlay.preset-terminal .label { color: var(--accent); }
+    #overlay.preset-terminal .dot { border-radius: 0; }
+    #overlay.preset-terminal .row { letter-spacing: 0.02em; text-shadow: none; }
+    /* Outline: individually framed transparent metrics. */
+    #overlay.preset-outline .row {
+      padding: var(--row-padding);
+      border: var(--border-width) solid currentColor;
+      border-radius: var(--radius);
+      background: transparent;
+    }
+    #overlay.preset-outline .row.detail { border-color: var(--border); }
+    /* Scoreboard: segmented live-event counter. */
+    #overlay.preset-scoreboard {
+      padding: 8px 10px;
+      border: var(--border-width) solid var(--border);
+      border-radius: 5px;
+      background: var(--surface);
+    }
+    #overlay.preset-scoreboard .row {
+      padding: var(--row-padding);
+      border-top: 3px solid currentColor;
+      background: rgba(255, 255, 255, 0.035);
+    }
+    #overlay.preset-scoreboard.layout-horizontal .row { border-top-width: 3px; }
+    /* Gradient: high-contrast colorful surface, metrics remain status-colored. */
+    #overlay.preset-gradient {
+      padding: 13px 17px;
+      border: var(--border-width) solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, var(--accent) -150%, var(--surface) 70%);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    }
+    /* Ticker: compact horizontal status strip. */
+    #overlay.preset-ticker {
+      flex-direction: row;
+      align-items: center;
+      padding: 7px 11px;
+      gap: 14px;
+      border: var(--border-width) solid var(--border);
+      border-radius: 3px;
+      background: var(--surface);
+    }
+    #overlay.preset-ticker .row + .row { border-left: 1px solid var(--border); padding-left: 13px; }
+    #overlay.preset-ticker .row { font-size: calc(var(--font-size) * 0.9); }
   </style>
 </head>
 <body>
@@ -129,7 +223,8 @@
     // ─── Appearance ────────────────────────────────────────────────────────────
     // Edit these values to change the overlay in OBS; no build step is needed.
     const design = {
-      preset: "classic",            // "classic", "pill", "card", "minimal"
+      preset: "classic",            // classic | pill | card | minimal | glass | neon
+                                    // broadcast | terminal | outline | scoreboard | gradient | ticker
       layout: "vertical",           // "vertical" or "horizontal"
       align: "right",               // "left", "center", "right"
       font_family: "'Segoe UI', 'Inter', system-ui, sans-serif",
@@ -137,10 +232,16 @@
       label_size: 11,               // Label size in px
       font_weight: 700,
       gap: 4,                       // Spacing between rows in px
+      row_padding: "6px 12px",       // For pill, outline and scoreboard
+      border_width: 1,              // Border thickness in px
       padding: "6px 10px",          // Outer OBS overlay padding
       corner_radius: 12,           // Pill/card corner radius in px
       background: "rgba(12, 18, 30, 0.82)",
       border_color: "rgba(255, 255, 255, 0.15)",
+      accent_color: "#38bdf8",     // Frames and highlight for selected presets
+      letter_spacing: 0,           // Letter spacing in px
+      indicator_size: 8,           // Status indicator size in px
+      indicator_style: "dot",       // dot | square | bar | none
       text_shadow: true,
       show_dot: true,               // Minimal preset hides dots regardless
       show_bitrate_label: false,
@@ -325,14 +426,22 @@
       css("--radius", design.corner_radius + "px");
       css("--surface", design.background);
       css("--border", design.border_color);
+      css("--accent", design.accent_color);
+      css("--row-padding", design.row_padding);
+      css("--border-width", Math.max(0, Number(design.border_width) || 0) + "px");
+      css("--indicator-size", Math.max(0, Number(design.indicator_size) || 0) + "px");
+      css("--value-spacing", Number(design.letter_spacing) + "px");
       css("--shadow", design.text_shadow ? "0 1px 4px rgba(0, 0, 0, 0.7)" : "none");
       document.body.style.padding = design.padding;
       const alignments = { left: "flex-start", center: "center", right: "flex-end" };
       document.body.style.alignItems = alignments[design.align] || "flex-end";
       const overlay = document.getElementById("overlay");
-      const presets = ["classic", "pill", "card", "minimal"];
+      const presets = ["classic", "pill", "card", "minimal", "glass", "neon",
+        "broadcast", "terminal", "outline", "scoreboard", "gradient", "ticker"];
+      const indicators = ["dot", "square", "bar", "none"];
       overlay.className = "preset-" + (presets.includes(design.preset) ? design.preset : "classic") +
-        " layout-" + (design.layout === "horizontal" ? "horizontal" : "vertical");
+        " layout-" + (design.layout === "horizontal" ? "horizontal" : "vertical") +
+        " indicator-" + (indicators.includes(design.indicator_style) ? design.indicator_style : "dot");
       overlay.style.alignItems = alignments[design.align] || "flex-end";
     };
 
@@ -403,8 +512,42 @@
         setTimeout(tick, Math.max(250, interval));
       }
     };
-    applyDesign();
-    tick();
+    // Built-in example mode uses synthetic values: no server request, no private key.
+    // Open examples/themes.html to compare every preset without a streaming server.
+    const previewParams = new URL(window.location.href).searchParams;
+    const demoMode = previewParams.get("demo") === "1";
+    if (demoMode) {
+      const preset = previewParams.get("preset");
+      const allowedPresets = ["classic", "pill", "card", "minimal", "glass", "neon",
+        "broadcast", "terminal", "outline", "scoreboard", "gradient", "ticker"];
+      if (allowedPresets.includes(preset)) design.preset = preset;
+      if (previewParams.get("layout") === "horizontal") design.layout = "horizontal";
+      design.align = "left";
+      design.show_bitrate_label = true;
+      // Each example shows the same sample values to allow visual comparison.
+      if (design.preset === "glass") design.background = "rgba(25, 39, 64, 0.52)";
+      if (design.preset === "terminal") {
+        design.background = "rgba(6, 17, 13, 0.97)";
+        design.accent_color = "#4ade80";
+      }
+      applyDesign();
+      render({
+        data: {
+          bitrate: 3480,
+          rtt: 46,
+          throughput: 3720,
+          peers: [{ bitrate: 1900, jitter: 2.3 }, { bitrate: 1580, jitter: 3.8 }],
+        },
+        server: {
+          type: "OpenIRL", show_rtt: true, show_label: true, label: "LIVE",
+          peer_display: previewParams.get("srtla") === "1" ? "details" : "off",
+          max_peers: 2,
+        },
+      });
+    } else {
+      applyDesign();
+      tick();
+    }
   </script>
 </body>
 </html>
