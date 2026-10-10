@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>OBS Overlay Theme Gallery</title>
+  <style>
+    :root {color-scheme:dark;--background:#080c18;--panel:#121a2b;--line:#28344b;--text:#f0f4ff;--muted:#a4b0ca;--accent:#70b9ff}
+    * {box-sizing:border-box}
+    body {margin:0;background:radial-gradient(circle at 80% 0%,#192946 0,transparent 36%),var(--background);font:15px/1.5 system-ui,'Segoe UI',sans-serif;color:var(--text)}
+    main {max-width:1200px;margin:auto;padding:46px 24px 84px}
+    .eyebrow {font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-weight:800}
+    h1 {font-size:clamp(28px,4.4vw,46px);letter-spacing:-.04em;line-height:1.1;margin:13px 0}
+    .intro {max-width:780px;color:var(--muted);font-size:16px;margin:0}
+    .intro strong{color:var(--text)}
+    .toolbar {display:flex;align-items:end;flex-wrap:wrap;gap:14px;margin:34px 0 20px;padding:16px;border:1px solid var(--line);border-radius:16px;background:rgba(16,26,44,.84)}
+    .control {display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.025em}
+    select,input {min-height:38px;color:var(--text);border-radius:8px;border:1px solid #384662;background:#0c1526;padding:7px 10px;font:inherit;min-width:120px}
+    input[type=color]{width:60px;min-width:60px;padding:4px;cursor:pointer}
+    input[type=range] {padding:5px;width:120px;min-width:120px;cursor:pointer}
+    .toolbar .note{color:#b7c5da;margin-left:auto;max-width:250px;font-size:12px}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    .theme{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;min-width:0}
+    .theme:hover{border-color:#547398}
+    .heading{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:16px 18px 8px}
+    .heading h2{font-size:16px;margin:0;letter-spacing:-.01em}
+    .heading .type{font-size:10px;color:#91aacc;text-transform:uppercase;letter-spacing:.12em}
+    .desc{color:var(--muted);font-size:12px;min-height:35px;margin:0;padding:0 18px 10px}
+    .stage{height:160px;margin:0 14px 14px;position:relative;border-radius:10px;overflow:hidden;
+      background-image:linear-gradient(145deg,rgba(11,18,31,.62),rgba(31,50,77,.25)),
+      linear-gradient(45deg,#25344b 25%,transparent 25%),
+      linear-gradient(-45deg,#25344b 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#25344b 75%),
+      linear-gradient(-45deg,transparent 75%,#25344b 75%);
+      background-color:#1e2b40;background-size:auto,24px 24px,24px 24px,24px 24px,24px 24px;
+      background-position:0 0,0 0,0 12px,12px -12px,-12px 0}
+    .stage::before {content:"OBS PREVIEW · SAMPLE DATA";position:absolute;z-index:1;top:8px;right:10px;letter-spacing:.08em;font-size:9px;color:#b1bfd4}
+    iframe{width:100%;height:100%;border:0;display:block;pointer-events:none;position:relative;z-index:2;background:transparent}
+    .actions{display:flex;gap:8px;padding:0 14px 16px}
+    button,.actions a{appearance:none;border:1px solid #3a5073;background:#1c304f;color:#e9f3ff;border-radius:8px;padding:8px 11px;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer}
+    .actions a{background:#122038;color:#bcd8ff}
+    button:hover,.actions a:hover{background:#294768}
+    .footer{margin-top:25px;color:var(--muted);font-size:13px}
+    .footer a{color:var(--accent)}
+    @media(max-width:760px){.grid{grid-template-columns:1fr}main{padding:28px 14px 64px}.toolbar .note{margin-left:0}.stage{height:150px}}
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Stream Server Bitrate · Design Studio</div>
+  <h1>Choose your OBS overlay style.</h1>
+  <p class="intro">12 real rendering presets, shown with <strong>synthetic demo statistics</strong> (3,480 kb/s · RTT 46 ms).
+    Nothing here connects to your servers. Every preview uses the same <code>colorBitrate.html</code> file as OBS.</p>
+  <div class="toolbar">
+    <label class="control">Layout
+      <select id="layout"><option value="vertical">Vertical</option><option value="horizontal">Horizontal</option></select>
+    </label>
+    <label class="control">Indicator
+      <select id="indicator"><option value="dot">Dot</option><option value="square">Square</option><option value="bar">Bar</option><option value="none">None</option></select>
+    </label>
+    <label class="control">Text size <span id="sizeLabel">22px</span>
+      <input id="fontSize" type="range" min="12" max="42" value="22">
+    </label>
+    <label class="control">Accent
+      <input id="accent" type="color" value="#38bdf8">
+    </label>
+    <label class="control">SRTLA links
+      <select id="srtla"><option value="0">Hidden</option><option value="1">2 example links</option></select>
+    </label>
+    <span class="note">Adjust the controls to compare designs. Use "Copy config" to paste a preset into your overlay.</span>
+  </div>
+  <div id="gallery" class="grid"></div>
+  <p class="footer">The sample data is for appearance testing only. In OBS, the actual overlay fetches bitrate and RTT from your configured servers.
+    <a href="../README.md">Documentation</a> · <a href="../colorBitrate.html?demo=1&amp;preset=classic">Open single demo</a></p>
+</main>
+<script>
+  const presets = [
+    ["classic", "Classic", "Original", "Transparent status numbers for a discreet stream overlay."],
+    ["minimal", "Minimal", "Clean", "No dots or panels. Just clear numbers."],
+    ["pill", "Pill", "Rounded", "Individual metric capsules with dark translucent backgrounds."],
+    ["card", "Card", "Panel", "One simple rounded card for all stats."],
+    ["glass", "Glass", "Frosted", "Translucent frosted-glass look for scene overlays."],
+    ["neon", "Neon", "Glow", "Glowing accent frame and color-coded live metrics."],
+    ["broadcast", "Broadcast", "On-air", "Rectangular lower third with an accent stripe."],
+    ["terminal", "Terminal", "Retro", "Monospaced console aesthetic with square corners."],
+    ["outline", "Outline", "Lightweight", "Thin colored boxes without a panel fill."],
+    ["scoreboard", "Scoreboard", "Studio", "Segmented metric readouts for live sports or events."],
+    ["gradient", "Gradient", "Vibrant", "Multitone card with custom accent gradient."],
+    ["ticker", "Ticker", "Compact", "Horizontal stats ribbon optimized for tight spaces."],
+  ];
+  const gallery = document.getElementById("gallery");
+  for (const [id, title, kind, description] of presets) {
+    const article = document.createElement("article");
+    article.className = "theme";
+    const head = document.createElement("div");
+    head.className = "heading";
+    const h = document.createElement("h2");
+    h.textContent = title;
+    const tag = document.createElement("span");
+    tag.className = "type";
+    tag.textContent = kind;
+    head.append(h, tag);
+    const d = document.createElement("p");
+    d.className = "desc";
+    d.textContent = description;
+    const stage = document.createElement("div");
+    stage.className = "stage";
+    const iframe = document.createElement("iframe");
+    iframe.title = title + " – synthetic stats preview";
+    iframe.dataset.preset = id;
+    iframe.loading = "eager";
+    stage.appendChild(iframe);
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.textContent = "Copy config";
+    copy.addEventListener("click", async () => {
+      const source = 'preset: "' + id + '",\n' +
+        'layout: "' + document.getElementById("layout").value + '",\n' +
+        'indicator_style: "' + document.getElementById("indicator").value + '",\n' +
+        'font_size: ' + document.getElementById("fontSize").value + ',\n' +
+        'accent_color: "' + document.getElementById("accent").value + '",';
+      try {
+        await navigator.clipboard.writeText(source);
+        copy.textContent = "Copied!";
+        setTimeout(() => { copy.textContent = "Copy config"; }, 1800);
+      } catch {
+        // file:// may not allow clipboard access. Show text for manual copying.
+        window.prompt("Copy these lines into your design object:", source);
+      }
+    });
+    const link = document.createElement("a");
+    link.textContent = "Open preview ↗";
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.dataset.presetLink = id;
+    actions.append(copy, link);
+    article.append(head, d, stage, actions);
+    gallery.appendChild(article);
+  }
+  function update() {
+    const params = new URLSearchParams({
+      demo: "1",
+      layout: document.getElementById("layout").value,
+      fontSize: document.getElementById("fontSize").value,
+      indicator: document.getElementById("indicator").value,
+      accent: document.getElementById("accent").value,
+      srtla: document.getElementById("srtla").value,
+    });
+    document.getElementById("sizeLabel").textContent = params.get("fontSize") + "px";
+    for (const frame of document.querySelectorAll("iframe[data-preset]")) {
+      const u = new URL("../colorBitrate.html", window.location.href);
+      u.search = params.toString();
+      u.searchParams.set("preset", frame.dataset.preset);
+      if (frame.src !== u.toString()) frame.src = u.toString();
+    }
+    for (const link of document.querySelectorAll("[data-preset-link]")) {
+      const u = new URL("../colorBitrate.html", window.location.href);
+      u.search = params.toString();
+      u.searchParams.set("preset", link.dataset.presetLink);
+      link.href = u.toString();
+    }
+  }
+  for (const id of ["layout", "indicator", "fontSize", "accent", "srtla"]) {
+    document.getElementById(id).addEventListener("input", update);
+    document.getElementById(id).addEventListener("change", update);
+  }
+  update();
+</script>
+</body>
+</html>
