@@ -704,7 +704,9 @@
       css("--shadow", design.text_shadow ? "0 1px 4px rgba(0, 0, 0, 0.7)" : "none");
       document.body.style.padding = design.padding;
       const alignments = { left: "flex-start", center: "center", right: "flex-end" };
-      document.body.style.alignItems = alignments[design.align] || "flex-end";
+      // In the row-oriented body, justifyContent is the horizontal axis.
+      // Keep alignItems at flex-end to anchor the overlay to the bottom of OBS.
+      document.body.style.justifyContent = alignments[design.align] || "flex-end";
       const overlay = document.getElementById("overlay");
       const presets = ["classic", "pill", "card", "minimal", "glass", "neon",
         "broadcast", "terminal", "outline", "scoreboard", "gradient", "ticker"];

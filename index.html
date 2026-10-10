@@ -485,11 +485,13 @@ document.addEventListener("click", event => {
     if (state.servers.length > 1) state.servers.splice(Number(btn.dataset.index), 1);
     else state.servers = [];
     renderServers();
+    syncPreview();
   } else if (btn.dataset.move !== undefined) {
     const i = Number(btn.dataset.index), j = i + Number(btn.dataset.move);
     if (j >= 0 && j < state.servers.length) {
       [state.servers[i], state.servers[j]] = [state.servers[j], state.servers[i]];
       renderServers();
+      syncPreview();
     }
   } else if (btn.dataset.widgetMove !== undefined) {
     const key = btn.dataset.widgetMove;
@@ -509,6 +511,7 @@ $("addServer").addEventListener("click", () => {
     label:"OpenIRL",show_throughput:false,peer_display:"off",max_peers:4,
   });
   renderServers();
+  syncPreview();
 });
 const report = message => { $("feedback").textContent = message; };
 function download(blob, name) {

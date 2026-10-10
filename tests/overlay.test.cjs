@@ -96,6 +96,7 @@ function createHarness(href = 'http://localhost/overlay.html', embedded = null) 
   return {
     api: context.__test,
     overlay,
+    body: document.body,
     urls,
     sockets,
     respondJson(value) {
@@ -514,4 +515,22 @@ test('GitHub Pages deploys README updates and README server examples are valid',
       language + ' configuration has exactly one RIST example');
     assert.match(example, /type: "NMS"/);
   }
+});
+
+test('left, center and right align the overlay horizontally in the OBS canvas', () => {
+  for (const [align, expected] of [
+    ['left', 'flex-start'], ['center', 'center'], ['right', 'flex-end'],
+  ]) {
+    const h = createHarness('http://localhost/bitrate.html', { design: { align } });
+    assert.equal(h.body.style.justifyContent, expected, align + ' body alignment');
+    assert.equal(h.body.style.alignItems, undefined,
+      'body alignItems must not be repurposed for horizontal positioning');
+  }
+});
+
+test('source add, remove and reorder refresh the generator preview', () => {
+  const generator = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(generator, /state\.servers\.splice\([\s\S]*?renderServers\(\);\s*syncPreview\(\);/);
+  assert.match(generator, /\[state\.servers\[i\], state\.servers\[j\]\][\s\S]*?renderServers\(\);\s*syncPreview\(\);/);
+  assert.match(generator, /\$\("addServer"\)[\s\S]*?renderServers\(\);\s*syncPreview\(\);/);
 });
