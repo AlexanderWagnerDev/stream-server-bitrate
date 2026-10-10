@@ -36,6 +36,11 @@
       min-height: 100vh;
       width: 100%;
     }
+    /* Demo-only checkerboard helps distinguish transparency from white backgrounds.
+       The live OBS overlay never applies this background. */
+    body.demo-mode {
+      background: repeating-conic-gradient(#22324a 0% 25%, #2e4059 0% 50%) 50% / 26px 26px;
+    }
     #overlay {
       display: flex;
       flex-direction: column;
@@ -849,8 +854,8 @@
         bitrate: 3480, rtt: 46, throughput: 3720, uptime: 3825,
         peers: [{ bitrate: 1900, jitter: 2.3 }, { bitrate: 1580, jitter: 3.8 }],
       }, server: {
-        type: "OpenIRL", show_rtt: true, show_label: true, show_throughput: true,
-        label: "LIVE", peer_display: previewParams.get("srtla") === "1" ? "details" : "off",
+        type: "OpenIRL", show_rtt: true, show_label: false, show_throughput: true,
+        peer_display: previewParams.get("srtla") === "1" ? "details" : "off",
         max_peers: 2,
       } };
       const count = Math.min(600, Math.max(5, Number(display.history_points) || 60));
@@ -862,6 +867,7 @@
       render(result);
     };
     if (demoMode) {
+      document.body.className = "demo-mode";
       const preset = previewParams.get("preset");
       const allowedPresets = ["classic", "pill", "card", "minimal", "glass", "neon",
         "broadcast", "terminal", "outline", "scoreboard", "gradient", "ticker"];
