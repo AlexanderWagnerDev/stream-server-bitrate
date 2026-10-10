@@ -129,6 +129,16 @@ HTML overlays use the browser's `fetch` API. The stats server must be **reachabl
 
 OpenRTMP's `stats_key` grants access to stream statistics, so treat overlay files and URLs containing it as sensitive. **Never embed an OpenRTMP admin API bearer token** in this public overlay. Similarly, OpenIRL uses the *player ID*, not an admin API key.
 
+## Tests
+
+Tests use Node.js 22 or later without external packages:
+
+```sh
+node --test tests/overlay.test.cjs
+```
+
+GitHub Actions runs the test suite on pull requests and pushes to `main`.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). Originally based on [b3ck/server-bitrate-html](https://github.com/b3ck/server-bitrate-html).
