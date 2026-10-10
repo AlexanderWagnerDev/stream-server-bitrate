@@ -220,7 +220,7 @@
   </style>
 </head>
 <body>
-  <div id="overlay" role="status" aria-live="off"></div>
+  <output id="overlay" aria-live="off"></output>
 
   <script>
     // ─── Server configuration ──────────────────────────────────────────────────
@@ -328,9 +328,9 @@
       }
       if (EMBEDDED_SETTINGS.design && typeof EMBEDDED_SETTINGS.design === "object") {
         const overrides = EMBEDDED_SETTINGS.design;
+        const originalColors = { ...design.colors };
         Object.assign(design, overrides);
-        design.colors = { green: "#4ade80", orange: "#fb923c", red: "#f87171",
-          muted: "rgba(255, 255, 255, 0.65)", ...(overrides.colors || {}) };
+        design.colors = { ...originalColors, ...overrides.colors };
       }
       if (EMBEDDED_SETTINGS.thresholds && typeof EMBEDDED_SETTINGS.thresholds === "object") {
         Object.assign(thresholds, EMBEDDED_SETTINGS.thresholds);
@@ -354,12 +354,14 @@
       return { bitrate: kbps, rtt: delay !== null && delay >= 0 ? delay : null };
     };
 
-    const tryFetch = async (url) => {
+    // Include response body consumption in the timeout, not just HTTP headers.
+    const tryFetch = async (url, format = "json") => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), Math.max(250, request_timeout));
       try {
         const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
-        return response.ok ? response : null;
+        if (!response.ok) return null;
+        return format === "text" ? await response.text() : await response.json();
       } catch {
         return null;
       } finally {
@@ -368,10 +370,9 @@
     };
 
     const fetchSRT = async ({ page, publisher }) => {
-      const response = await tryFetch(page);
-      if (!response) return null;
+      const data = await tryFetch(page);
+      if (!data) return null;
       try {
-        const data = await response.json();
         const publisherData = data.publishers?.[publisher];
         const stats = publisherData ? normalized(publisherData.bitrate, publisherData.rtt) : null;
         return stats ? { ...stats, uptime: numeric(publisherData.uptime) } : null;
@@ -382,15 +383,19 @@
 
     const openIRLUrl = ({ page, key }) => {
       const url = new URL(page, window.location.href);
-      if (key) url.pathname = url.pathname.replace(/\/+$/, "") + "/" + encodeURIComponent(key);
+      if (key) {
+        const pathname = url.pathname;
+        let end = pathname.length;
+        while (end > 0 && pathname[end - 1] === "/") end--;
+        url.pathname = pathname.slice(0, end) + "/" + encodeURIComponent(key);
+      }
       return url.toString();
     };
 
     const fetchOpenIRL = async (server) => {
       try {
-        const response = await tryFetch(openIRLUrl(server));
-        if (!response) return null;
-        const data = await response.json();
+        const data = await tryFetch(openIRLUrl(server));
+        if (!data) return null;
         if (!data.publisher || (data.status && data.status !== "ok")) return null;
 
         // OpenIRL modern stats expose the same aggregate fields for SRT and SRTLA.
@@ -422,10 +427,9 @@
 
     const fetchOpenRTMP = async (server) => {
       try {
-        const response = await tryFetch(openRTMPUrl(server));
-        if (!response) return null;
+        const data = await tryFetch(openRTMPUrl(server));
+        if (!data || typeof data !== "object") return null;
         // Public /stats returns a flat, per-stream JSON object.
-        const data = await response.json();
         const stats = normalized(data.bitrate_kbps, data.rtt_ms);
         return stats ? { ...stats, uptime: numeric(data.uptime) } : null;
       } catch {
@@ -435,30 +439,37 @@
     };
 
     const fetchNMS = async ({ page }) => {
-      const response = await tryFetch(page);
-      if (!response) return null;
+      const data = await tryFetch(page);
+      if (!data) return null;
       try {
-        const data = await response.json();
         return normalized(data.bitrate, null);
       } catch {
         return null;
       }
     };
 
+    const selectNginxApplication = (doc, key) => {
+      for (const application of doc.getElementsByTagName("application")) {
+        const name = Array.from(application.children).find(child => child.tagName === "name");
+        if (name?.textContent?.trim() === key) return application;
+      }
+      return null;
+    };
+
     const fetchNGINX = async ({ page, key }) => {
-      const response = await tryFetch(page);
-      if (!response) return null;
+      const xml = await tryFetch(page, "text");
+      if (!xml) return null;
       try {
-        const xml = await response.text();
         const doc = new DOMParser().parseFromString(xml, "text/xml");
         if (doc.getElementsByTagName("parsererror").length) return null;
-        const app = doc.getElementsByTagName(key)[0];
-        if (!app) return null;
-        const streams = app.getElementsByTagName("stream");
-        for (const stream of streams) {
+        const application = selectNginxApplication(doc, key);
+        if (!application) return null;
+        for (const stream of application.getElementsByTagName("stream")) {
           if (!stream.getElementsByTagName("publishing").length) continue;
           const node = stream.getElementsByTagName("bw_in")[0];
-          if (node) return normalized(numeric(node.textContent) / 1000, null);
+          if (!node) continue;
+          const stats = normalized(numeric(node.textContent) / 1000, null);
+          if (stats) return stats;
         }
         return null;
       } catch {
@@ -485,8 +496,12 @@
     };
 
     const statusColor = (value, orange, red, higherIsBad) => {
-      if (higherIsBad) return value >= red ? "red" : value >= orange ? "orange" : "green";
-      return value <= red ? "red" : value <= orange ? "orange" : "green";
+      if (higherIsBad) {
+        if (value >= red) return "red";
+        return value >= orange ? "orange" : "green";
+      }
+      if (value <= red) return "red";
+      return value <= orange ? "orange" : "green";
     };
 
     const applyDesign = () => {
@@ -779,7 +794,7 @@
       }
     } else {
       applyDesign();
-      tick();
+      void tick();
     }
   </script>
 </body>
