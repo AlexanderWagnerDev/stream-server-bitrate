@@ -246,11 +246,9 @@
       try {
         const response = await tryFetch(openRTMPUrl(server));
         if (!response) return null;
-        // The current /stats endpoint returns a flat, per-stream public object.
-        // Older /stats responses contain a streams array; support both.
+        // Public /stats returns a flat, per-stream JSON object.
         const data = await response.json();
-        const stats = Array.isArray(data.streams) ? data.streams[0] : data;
-        return stats ? normalized(stats.bitrate_kbps, stats.rtt_ms) : null;
+        return normalized(data.bitrate_kbps, data.rtt_ms);
       } catch {
         // OpenRTMP responds with "Stream offline" as plain text when offline.
         return null;
