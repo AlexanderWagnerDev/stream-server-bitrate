@@ -576,63 +576,80 @@
       for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
       return node;
     };
+    const graphCeiling = (metric, values) => {
+      const valid = values.filter(value => value !== null && value >= 0);
+      const observed = valid.length ? Math.max(...valid) : 0;
+      const fixed = numeric(display.graph_max);
+      if (fixed !== null && fixed > 0) return fixed;
+      const minimum = metric === "rtt" ? 100 : 3000;
+      return Math.max(minimum, Math.ceil(observed * 1.2 / 100) * 100);
+    };
+
+    const drawGraphGrid = (svg, width, height) => {
+      if (!display.graph_grid) return;
+      const plotHeight = height - 10;
+      for (let i = 0; i <= 4; i++) {
+        const y = 5 + plotHeight * i / 4;
+        svg.appendChild(svgNode("line", { x1: 0, y1: y, x2: width, y2: y,
+          stroke: "var(--border)", "stroke-width": 1 }));
+      }
+    };
+
+    const graphSegments = (values, width, height, ceiling) => {
+      const slots = Math.max(2, Number(display.history_points) || 60);
+      const segments = [];
+      let segment = [];
+      for (const [i, value] of values.entries()) {
+        if (value === null || value < 0) {
+          if (segment.length) segments.push(segment);
+          segment = [];
+          continue;
+        }
+        segment.push([(width - 2) * i / (slots - 1),
+          height - 5 - Math.min(value / ceiling, 1) * (height - 10)]);
+      }
+      if (segment.length) segments.push(segment);
+      return segments;
+    };
+
+    const drawGraphSegment = (svg, points, bottom, color) => {
+      const path = points.map(([x, y], index) =>
+        (index === 0 ? "M" : "L") + x.toFixed(2) + " " + y.toFixed(2)).join(" ");
+      if (display.graph_fill && points.length > 1) {
+        const first = points[0][0];
+        const last = points.at(-1)[0];
+        svg.appendChild(svgNode("path", { d: path + " L" + last + " " + bottom +
+          " L" + first + " " + bottom + " Z", fill: color,
+          "fill-opacity": 0.13, stroke: "none" }));
+      }
+      svg.appendChild(svgNode("path", { d: path, fill: "none", stroke: color,
+        "stroke-width": Math.max(1, Number(display.graph_line_width) || 2),
+        "stroke-linejoin": "round", "stroke-linecap": "round" }));
+      const last = points.at(-1);
+      svg.appendChild(svgNode("circle", { cx: last[0], cy: last[1], r: 2.8, fill: color }));
+    };
+
     const makeGraph = (metric, title, cssColor) => {
       const width = Math.max(120, Math.min(960, Number(display.graph_width) || 320));
       const height = Math.max(50, Math.min(300, Number(display.graph_height) || 105));
-      const points = history.slice(-Math.min(600, Math.max(5, Number(display.history_points) || 60)));
-      const values = points.map((sample) => sample && numeric(sample[metric]));
-      const defined = values.filter((v) => v !== null && v >= 0);
-      const observedMax = defined.length ? Math.max(...defined) : 0;
-      const configuredMax = numeric(display.graph_max);
-      const ceiling = configuredMax && configuredMax > 0 ? configuredMax :
-        Math.max(metric === "rtt" ? 100 : 3000, Math.ceil(observedMax * 1.2 / 100) * 100);
+      const count = Math.min(600, Math.max(5, Number(display.history_points) || 60));
+      const values = history.slice(-count).map(sample => sample ? numeric(sample[metric]) : null);
+      const ceiling = graphCeiling(metric, values);
       const card = document.createElement("div");
       card.className = "chart";
       const label = document.createElement("div");
       label.className = "chart-label";
-      label.appendChild(span("", title), span("", metric === "rtt"
-        ? Math.round(ceiling) + " ms" : displayBitrate(ceiling)));
-      const svg = svgNode("svg", { viewBox: `0 0 ${width} ${height}`, role: "img",
-        "aria-label": title + " history, latest " + (defined.at(-1) ?? 0) });
-      const padding = 5;
-      const bottom = height - padding;
-      const plotH = height - padding * 2;
-      if (display.graph_grid) {
-        for (let i = 0; i <= 4; i++) {
-          svg.appendChild(svgNode("line", { x1: 0, y1: padding + plotH * i / 4,
-            x2: width, y2: padding + plotH * i / 4,
-            stroke: "var(--border)", "stroke-width": 1 }));
-        }
-      }
-      const slots = Math.max(2, Number(display.history_points) || 60);
-      const graphPoints = values.map((value, i) => {
-        if (value === null || value < 0) return null;
-        return [(width - 2) * i / (slots - 1), bottom - Math.min(value / ceiling, 1) * plotH];
-      });
-      // Disconnect lines across offline samples. Do not draw false dips to zero.
-      const segments = [];
-      let segment = [];
-      for (const p of graphPoints) {
-        if (p) segment.push(p);
-        else if (segment.length) { segments.push(segment); segment = []; }
-      }
-      if (segment.length) segments.push(segment);
+      let scaleText = displayBitrate(ceiling);
+      if (metric === "rtt") scaleText = Math.round(ceiling) + " ms";
+      label.append(span("", title), span("", scaleText));
+      const defined = values.filter(value => value !== null && value >= 0);
+      const lastValue = defined.at(-1) ?? 0;
+      const svg = svgNode("svg", { viewBox: "0 0 " + width + " " + height, role: "img",
+        "aria-label": title + " history, latest " + lastValue });
+      drawGraphGrid(svg, width, height);
       const color = display.graph_color === "accent" ? "var(--accent)" : cssColor;
-      for (const pointsInSegment of segments) {
-        const path = pointsInSegment.map(([x, y], i) =>
-          (i ? "L" : "M") + x.toFixed(2) + " " + y.toFixed(2)).join(" ");
-        if (display.graph_fill && pointsInSegment.length > 1) {
-          const first = pointsInSegment[0][0];
-          const last = pointsInSegment.at(-1)[0];
-          svg.appendChild(svgNode("path", { d: path + " L" + last + " " + bottom +
-            " L" + first + " " + bottom + " Z", fill: color,
-          "fill-opacity": 0.13, stroke: "none" }));
-        }
-        svg.appendChild(svgNode("path", { d: path, fill: "none", stroke: color,
-          "stroke-width": Math.max(1, Number(display.graph_line_width) || 2),
-          "stroke-linejoin": "round", "stroke-linecap": "round" }));
-        const last = pointsInSegment.at(-1);
-        svg.appendChild(svgNode("circle", { cx: last[0], cy: last[1], r: 2.8, fill: color }));
+      for (const segment of graphSegments(values, width, height, ceiling)) {
+        drawGraphSegment(svg, segment, height - 5, color);
       }
       card.append(label, svg);
       return card;
@@ -659,61 +676,92 @@
       const hours = Math.floor(s / 3600);
       return hours + ":" + pad(Math.floor(s % 3600 / 60)) + ":" + pad(s % 60);
     };
-    const render = (result) => {
-      const overlay = document.getElementById("overlay");
-      const widgets = {};
-      if (!result) {
-        widgets.bitrate = [makeRow(design.offline_text, "no-signal red", null)];
-      } else {
-        const { data, server } = result;
-        const brColor = statusColor(data.bitrate, thresholds.bitrate_orange, thresholds.bitrate_red, false);
-        const brLabel = server.show_label ? server.label || server.type :
-          design.show_bitrate_label ? "BITRATE" : null;
-        if (display.bitrate) widgets.bitrate = [makeRow(displayBitrate(data.bitrate), brColor, brLabel)];
-        if (display.rtt && server.show_rtt && data.rtt !== null) {
-          const rttColor = statusColor(data.rtt, thresholds.rtt_orange, thresholds.rtt_red, true);
-          widgets.rtt = [makeRow(Math.round(data.rtt) + (design.show_units ? " ms" : ""), rttColor, "RTT")];
-        }
-        if (display.throughput && server.show_throughput &&
-            data.throughput !== null && data.throughput !== undefined) {
-          widgets.throughput = [makeRow(displayBitrate(data.throughput), "detail", "NETWORK")];
-        }
-        if (display.peers && Array.isArray(data.peers) && server.peer_display !== "off" && server.peer_display) {
-          const peers = [makeRow(data.peers.length + " links", "detail", "SRTLA")];
-          if (server.peer_display === "details") {
-            const maxPeers = Math.max(0, Math.min(16, Number(server.max_peers) || 4));
-            for (const [index, peer] of data.peers.slice(0, maxPeers).entries()) {
-              const values = [];
-              if (peer.bitrate !== null) values.push(displayBitrate(peer.bitrate));
-              if (peer.jitter !== null) values.push(peer.jitter.toFixed(1) + " ms jitter");
-              peers.push(makeRow(values.join(" · ") || "–", "detail", "LINK " + (index + 1)));
-            }
-          }
-          widgets.peers = peers;
-        }
-        if (display.uptime && data.uptime !== null && data.uptime !== undefined) {
-          widgets.uptime = [makeRow(formatUptime(data.uptime), "detail", "UPTIME")];
-        }
-        if (display.bitrate_bar) widgets.bitrate_bar = [makeBar(data.bitrate, brColor)];
-        if (display.status) widgets.status = [makeRow("LIVE", "green metric-status", "STATUS")];
-      }
-      if (!result && display.status) widgets.status = [makeRow("OFFLINE", "red metric-status", "STATUS")];
-      if (display.graph) widgets.graph = [makeGraph("bitrate", "BITRATE HISTORY",
-        result ? "var(--color-" + statusColor(result.data.bitrate,
-          thresholds.bitrate_orange, thresholds.bitrate_red, false) + ")" : "var(--color-muted)")];
-      if (display.rtt_graph) widgets.rtt_graph = [makeGraph("rtt", "RTT HISTORY",
-        result && result.data.rtt !== null ? "var(--color-" + statusColor(result.data.rtt,
-          thresholds.rtt_orange, thresholds.rtt_red, true) + ")" : "var(--color-muted)")];
+    const bitrateLabel = server => {
+      if (server.show_label) return server.label || server.type;
+      return design.show_bitrate_label ? "BITRATE" : null;
+    };
 
+    const buildPeerRows = (server, data) => {
+      if (!display.peers || !Array.isArray(data.peers) ||
+          !server.peer_display || server.peer_display === "off") return [];
+      const rows = [makeRow(data.peers.length + " links", "detail", "SRTLA")];
+      if (server.peer_display !== "details") return rows;
+      const maxPeers = Math.max(0, Math.min(16, Number(server.max_peers) || 4));
+      for (const [index, peer] of data.peers.slice(0, maxPeers).entries()) {
+        const values = [];
+        if (peer.bitrate !== null) values.push(displayBitrate(peer.bitrate));
+        if (peer.jitter !== null) values.push(peer.jitter.toFixed(1) + " ms jitter");
+        rows.push(makeRow(values.join(" · ") || "–", "detail", "LINK " + (index + 1)));
+      }
+      return rows;
+    };
+
+    const buildLiveWidgets = ({ data, server }) => {
+      const widgets = {};
+      const bitrateColor = statusColor(data.bitrate,
+        thresholds.bitrate_orange, thresholds.bitrate_red, false);
+      if (display.bitrate) {
+        widgets.bitrate = [makeRow(displayBitrate(data.bitrate), bitrateColor, bitrateLabel(server))];
+      }
+      if (display.rtt && server.show_rtt && data.rtt !== null) {
+        const rttColor = statusColor(data.rtt, thresholds.rtt_orange, thresholds.rtt_red, true);
+        widgets.rtt = [makeRow(Math.round(data.rtt) + (design.show_units ? " ms" : ""), rttColor, "RTT")];
+      }
+      if (display.throughput && server.show_throughput && data.throughput !== null &&
+          data.throughput !== undefined) {
+        widgets.throughput = [makeRow(displayBitrate(data.throughput), "detail", "NETWORK")];
+      }
+      const peers = buildPeerRows(server, data);
+      if (peers.length) widgets.peers = peers;
+      if (display.uptime && data.uptime !== null && data.uptime !== undefined) {
+        widgets.uptime = [makeRow(formatUptime(data.uptime), "detail", "UPTIME")];
+      }
+      if (display.bitrate_bar) widgets.bitrate_bar = [makeBar(data.bitrate, bitrateColor)];
+      if (display.status) widgets.status = [makeRow("LIVE", "green metric-status", "STATUS")];
+      return widgets;
+    };
+
+    const historyColor = (result, metric) => {
+      if (!result) return "var(--color-muted)";
+      const { data } = result;
+      if (metric === "rtt") {
+        if (data.rtt === null) return "var(--color-muted)";
+        const color = statusColor(data.rtt, thresholds.rtt_orange, thresholds.rtt_red, true);
+        return "var(--color-" + color + ")";
+      }
+      const color = statusColor(data.bitrate, thresholds.bitrate_orange, thresholds.bitrate_red, false);
+      return "var(--color-" + color + ")";
+    };
+
+    const appendHistoryWidgets = (widgets, result) => {
+      if (display.graph) {
+        widgets.graph = [makeGraph("bitrate", "BITRATE HISTORY", historyColor(result, "bitrate"))];
+      }
+      if (display.rtt_graph) {
+        widgets.rtt_graph = [makeGraph("rtt", "RTT HISTORY", historyColor(result, "rtt"))];
+      }
+    };
+
+    const orderedWidgets = widgets => {
       const allowed = ["bitrate", "rtt", "throughput", "peers", "uptime", "status",
         "bitrate_bar", "graph", "rtt_graph"];
       const order = Array.isArray(display.order) ? display.order : allowed;
-      const ordered = [...new Set([...order.filter(name => allowed.includes(name)), ...allowed])];
-      const elements = ordered.flatMap((name) => widgets[name] || []);
-      if (display.title && typeof display.title === "string") {
+      const names = [...new Set([...order.filter(name => allowed.includes(name)), ...allowed])];
+      return names.flatMap(name => widgets[name] || []);
+    };
+
+    const render = result => {
+      const widgets = result ? buildLiveWidgets(result) :
+        { bitrate: [makeRow(design.offline_text, "no-signal red", null)] };
+      if (!result && display.status) {
+        widgets.status = [makeRow("OFFLINE", "red metric-status", "STATUS")];
+      }
+      appendHistoryWidgets(widgets, result);
+      const elements = orderedWidgets(widgets);
+      if (typeof display.title === "string" && display.title) {
         elements.unshift(span("label overlay-title", display.title.slice(0, 100)));
       }
-      overlay.replaceChildren(...elements);
+      document.getElementById("overlay").replaceChildren(...elements);
     };
 
     // Sequential polling avoids overlapping requests during server outages.
