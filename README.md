@@ -65,29 +65,54 @@ Only the **first server with a valid positive bitrate** is displayed. When the c
 
 SRTLA details show **LINK 1**, **LINK 2**, etc. with bitrate and jitter; the number of peer rows and all measurements come from the server, not from inferred connections. Individual links are deliberately displayed in a neutral color because the overall bitrate thresholds do not apply to each link in isolation.
 
-## Design customization
+## Overlay designs: 12 themes + interactive previews
 
-Edit the `design` object in the same HTML file. The default `classic` preset retains a transparent background and compact color-coded rows.
+![Preview comparison of 12 OBS bitrate overlay presets](docs/theme-previews.svg)
+
+**[Open the interactive theme gallery](examples/themes.html)** – download this repository and open `examples/themes.html` in a browser. Each card embeds **the actual overlay**, with fake bitrate/RTT values so you can compare designs safely without a running server or stats credentials. Try horizontal vs vertical layout, accent colors, status indicators, text size, and example SRTLA connection details. The SVG above is a design contact sheet; the gallery is the live-rendered source of truth.
+
+| Preset | Visual style |
+| --- | --- |
+| `classic` | Original transparent, color-coded bitrate and RTT |
+| `minimal` | Bare numbers, no status dot |
+| `pill` | Rounded individual metric capsules |
+| `card` | One rounded, dark statistics card |
+| `glass` | Frosted translucent surface and subtle blur |
+| `neon` | Accent outline and glowing measurements |
+| `broadcast` | Flat lower third with a prominent accent bar |
+| `terminal` | Monospace retro command-line display |
+| `outline` | Transparent metric frames |
+| `scoreboard` | Segmented counter blocks for event or studio overlays |
+| `gradient` | Accent-tinted gradient panel |
+| `ticker` | Compact horizontal information ribbon |
+
+All themes work with every configured server source; none requires a particular bitrate API. Change the `design` object in `colorBitrate.html`:
 
 ```js
 const design = {
-  preset: "classic",        // classic | pill | card | minimal
-  layout: "vertical",      // vertical | horizontal
-  align: "right",          // left | center | right
+  preset: "neon",                  // One of the 12 preset names above
+  layout: "vertical",              // vertical | horizontal
+  align: "right",                  // left | center | right
   font_family: "'Segoe UI', 'Inter', system-ui, sans-serif",
-  font_size: 22,
+  font_size: 22,                   // Main value, px
   label_size: 11,
   font_weight: 700,
   gap: 4,
-  padding: "6px 10px",
+  row_padding: "6px 12px",
+  padding: "6px 10px",             // Outer OBS padding
   corner_radius: 12,
+  border_width: 1,
   background: "rgba(12, 18, 30, 0.82)",
   border_color: "rgba(255, 255, 255, 0.15)",
+  accent_color: "#38bdf8",
+  letter_spacing: 0,
+  indicator_size: 8,
+  indicator_style: "dot",          // dot | square | bar | none
   text_shadow: true,
-  show_dot: true,
+  show_dot: true,                  // Existing option; false hides all dots
   show_bitrate_label: false,
   show_units: true,
-  bitrate_unit: "kb/s",   // kb/s | Mb/s
+  bitrate_unit: "kb/s",            // kb/s | Mb/s
   mbps_decimals: 2,
   offline_text: "NO SIGNAL",
   colors: {
@@ -99,7 +124,17 @@ const design = {
 };
 ```
 
-Choose **classic** for the original overlay, **pill** for individual rounded backgrounds, **card** for a single background, or **minimal** for typography without status dots. Combine with horizontal/vertical layout, alignment, units, sizes, spacing, transparency and colors.
+The selected preset provides a layout and decorative frame. Your own colors, labels, font sizes, background opacity, and status threshold settings still apply. `classic` remains the backward-compatible default; the existing `show_dot` field is still supported.
+
+### Local preview with synthetic statistics
+
+You can also open a **single** design directly, without configuring any server:
+
+```text
+colorBitrate.html?demo=1&preset=glass
+```
+
+`demo=1` is opt-in and only displays known synthetic values; it performs **no stats requests**. Remove the demo query parameter to use live data in OBS. Additional *demo-only* parameters: `layout=horizontal`, `indicator=bar`, `fontSize=26`, `accent=%2338bdf8`, `srtla=1`. For permanent settings, edit the `design` object. Never use a URL with `demo=1` as the live OBS source.
 
 Thresholds are independent of the display unit:
 
@@ -152,7 +187,7 @@ Ein transparentes OBS-Bitrate-Overlay mit automatischem Server-Fallback und vier
 - **OpenIRL SLS (SRT und SRTLA):** `{ type: "OpenIRL", page: "http://server:8080/stats", key: "player_id", show_rtt: true }`. Bei SRTLA können mit `peer_display: "count"` oder `"details"` die Verbindungen und deren Bitraten/Jitter eingeblendet werden. Die Gesamtbitrate stammt direkt vom Server; RTT ist die Publisher-RTT, nicht die RTT jeder Verbindung.
 - **OpenRTMP librtmp2-server:** `{ type: "OpenRTMP", page: "http://server:8080/stats", key: "sts_...", show_rtt: true }`. Hier ist `key` der Stats-Key, kein API-Token. Bei Browser-Quellen **CORS beachten**, siehe oben.
 - **Altes SRT-Live-Server-JSON:** `type: "SRT"` erwartet ausdrücklich `publishers[publisher]`, nicht das moderne OpenIRL-Format.
-- **Darstellung:** `design.preset` = `classic`, `pill`, `card` oder `minimal`. Zusätzliche Optionen: horizontal/vertikal, Größe, Schrift, Farben, Abstände, Transparenz, Rundung, Statuspunkte, Einheiten (kb/s oder Mb/s).
+- **Darstellung:** 12 Presets: `classic`, `minimal`, `pill`, `card`, `glass`, `neon`, `broadcast`, `terminal`, `outline`, `scoreboard`, `gradient` und `ticker`. Zusätzlich einstellbar: Ausrichtung, Schrift, Farben, Abstände, Transparenz, Akzentfarbe, Rahmen, Status-Indikator sowie kb/s oder Mb/s. **[Beispielbilder](docs/theme-previews.svg)** und **[interaktive Vorschau](examples/themes.html)** (Repository herunterladen und lokal öffnen).
 - **Schwellenwerte:** Bitrate grün über 2500, orange bis 2500, rot bis 1200 kb/s. RTT grün unter 120, orange ab 120, rot ab 250 ms. Beide unter `thresholds` anpassbar.
 
 In OBS eine Browser-Quelle mit **Lokale Datei** hinzufügen und `colorBitrate.html` auswählen. Alle Einstellungen stehen direkt in dieser Datei; zusätzliche Pakete sind nicht erforderlich.
