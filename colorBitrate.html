@@ -74,6 +74,11 @@
     .no-signal { color: var(--color-red); }
 
     /* Presets are purely visual; all data sources use the same renderer. */
+    .row.detail {
+      color: var(--color-muted);
+      font-size: calc(var(--font-size) * 0.58);
+      font-weight: 600;
+    }
     #overlay.preset-pill .row {
       padding: 6px 12px;
       border: 1px solid var(--border);
@@ -105,7 +110,10 @@
 
       // OpenIRL SLS stats page: page is /stats, key is the PLAYER ID.
       // You can alternatively put /stats/<player_id> in page and omit key.
-      // { type: "OpenIRL", page: "http://127.0.0.1:8080/stats", key: "live", show_rtt: true, show_label: true },
+      // Peer modes (SRTLA only): "off", "count", or "details".
+      // { type: "OpenIRL", page: "http://127.0.0.1:8080/stats", key: "live",
+      //   show_rtt: true, show_label: true, show_throughput: false,
+      //   peer_display: "details", max_peers: 4 },
 
       // OpenRTMP librtmp2-server: PUBLIC stats_key, NOT an API bearer token.
       // Also accepts a full page URL with ?key=... and no separate key field.
@@ -206,7 +214,23 @@
         const response = await tryFetch(openIRLUrl(server));
         if (!response) return null;
         const data = await response.json();
-        return data.publisher ? normalized(data.publisher.bitrate, data.publisher.rtt) : null;
+        if (data.status !== "ok" || !data.publisher) return null;
+
+        // OpenIRL modern stats expose the same aggregate fields for SRT and SRTLA.
+        // Only SRTLA returns publisher.peers (per-link bitrate/throughput/jitter).
+        const publisher = data.publisher;
+        const stats = normalized(publisher.bitrate, publisher.rtt);
+        if (!stats) return null;
+        const peers = Array.isArray(publisher.peers) ? publisher.peers : null;
+        return {
+          ...stats,
+          throughput: numeric(publisher.throughput),
+          peers: peers && peers.map((peer) => ({
+            bitrate: numeric(peer.bitrate),
+            throughput: numeric(peer.throughput),
+            jitter: numeric(peer.jitter), // milliseconds
+          })),
+        };
       } catch {
         return null;
       }
@@ -352,6 +376,21 @@
         const rttColor = statusColor(data.rtt, thresholds.rtt_orange, thresholds.rtt_red, true);
         const rttValue = Math.round(data.rtt) + (design.show_units ? " ms" : "");
         rows.push(makeRow(rttValue, rttColor, "RTT"));
+      }
+      if (server.show_throughput && data.throughput !== null && data.throughput !== undefined) {
+        rows.push(makeRow(displayBitrate(data.throughput), "detail", "NETWORK"));
+      }
+      if (Array.isArray(data.peers) && server.peer_display !== "off" && server.peer_display) {
+        rows.push(makeRow(data.peers.length + " links", "detail", "SRTLA"));
+        if (server.peer_display === "details") {
+          const maxPeers = Math.max(0, Math.min(16, Number(server.max_peers) || 4));
+          for (const [index, peer] of data.peers.slice(0, maxPeers).entries()) {
+            const values = [];
+            if (peer.bitrate !== null) values.push(displayBitrate(peer.bitrate));
+            if (peer.jitter !== null) values.push(peer.jitter.toFixed(1) + " ms jitter");
+            rows.push(makeRow(values.join(" · ") || "–", "detail", "LINK " + (index + 1)));
+          }
+        }
       }
       overlay.replaceChildren(...rows);
     };
