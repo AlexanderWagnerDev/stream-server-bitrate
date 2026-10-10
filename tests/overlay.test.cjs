@@ -44,6 +44,24 @@ function createHarness(href = 'http://localhost/overlay.html', embedded = null) 
   const urls = [];
   let result = { ok: false };
   let bodyTimeoutActive = false;
+  const sockets = [];
+  class FakeWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      sockets.push(this);
+    }
+
+    emit(value) {
+      this.readyState = 1;
+      this.onmessage({ data: JSON.stringify(value) });
+    }
+
+    close() {
+      this.readyState = 3;
+      this.onclose?.();
+    }
+  }
 
   const document = {
     body: new Element(),
@@ -58,6 +76,7 @@ function createHarness(href = 'http://localhost/overlay.html', embedded = null) 
     window: { location: { href } },
     URL,
     AbortController,
+    WebSocket: FakeWebSocket,
     clearTimeout() { bodyTimeoutActive = false; },
     setTimeout() { bodyTimeoutActive = true; return 1; },
     async fetch(url) {
@@ -72,12 +91,13 @@ function createHarness(href = 'http://localhost/overlay.html', embedded = null) 
     'const EMBEDDED_SETTINGS = ' + JSON.stringify(embedded) + '; // GENERATED_OVERLAY_SETTINGS',
   ) : script;
   vm.runInContext(source + '\n' +
-    'globalThis.__test = { fetchOpenIRL, fetchOpenRTMP, fetchSRT, fetchNGINX, normalized, render, recordSample, history };', context);
+    'globalThis.__test = { fetchOpenIRL, fetchOpenRTMP, fetchSRT, fetchNGINX, fetchRIST, parseRISTStats, normalized, render, recordSample, history };', context);
 
   return {
     api: context.__test,
     overlay,
     urls,
+    sockets,
     respondJson(value) {
       result = { ok: true, async json() { return value; } };
     },
@@ -380,4 +400,78 @@ test('responsive CSS wraps metric text and keeps the demo background separate', 
   assert.match(html, /flex-wrap: wrap/);
   assert.match(html, /body\.demo-mode/);
   assert.match(html, /background: transparent/);
+});
+
+test('moo RIST WebSocket aggregates alive peers in bits/s and averages RTT', async () => {
+  const h = createHarness();
+  const waiting = h.api.fetchRIST({ page: 'ws://localhost:8683' });
+  assert.equal(h.sockets.length, 1);
+  assert.equal(h.sockets[0].url, 'ws://localhost:8683/');
+  h.sockets[0].emit({
+    'receiver-stats': {
+      flowinstant: {
+        dead: 0,
+        peers: [
+          { dead: 0, stats: { bitrate: 2200000, rtt: 24 } },
+          { dead: 0, stats: { bitrate: 1300000, rtt: 36 } },
+          { dead: 1, stats: { bitrate: 9000000, rtt: 99 } },
+        ],
+      },
+    },
+  });
+  const stats = await waiting;
+  assert.equal(stats.bitrate, 3500);
+  assert.equal(stats.rtt, 30);
+  assert.equal(stats.peers.length, 2);
+  assert.equal(stats.peers[0].bitrate, 2200);
+  assert.equal(stats.peers[1].bitrate, 1300);
+  assert.equal(stats.peers[0].jitter, null);
+
+  // Reusing the cached fresh snapshot must not open another socket.
+  assert.equal((await h.api.fetchRIST({ page: 'ws://localhost:8683' })).bitrate, 3500);
+  assert.equal(h.sockets.length, 1);
+});
+
+test('moo RIST WebSocket returns null immediately for dead or missing peers', async () => {
+  const h = createHarness();
+  const initial = h.api.fetchRIST({ page: 'ws://127.0.0.1:8081' });
+  h.sockets[0].emit({
+    'receiver-stats': {
+      flowinstant: { dead: 1, peers: [{ dead: 1, stats: { bitrate: 900000, rtt: 27 } }] },
+    },
+  });
+  assert.equal(await initial, null);
+  // No wait for request_timeout when the latest stats already say offline.
+  assert.equal(await h.api.fetchRIST({ page: 'ws://127.0.0.1:8081' }), null);
+  assert.equal(h.api.parseRISTStats({ 'sender-stats': {} }), null);
+  assert.equal(h.api.parseRISTStats({ 'receiver-stats': { flowinstant: { peers: [] } } }), null);
+});
+
+test('RIST HTTP JSON endpoint accepts the same receiver-stats schema if configured', async () => {
+  const h = createHarness();
+  h.respondJson({ 'receiver-stats': {
+    flowinstant: {
+      peers: [
+        { dead: 0, stats: { bitrate: 2600000, rtt: 14 } },
+        { dead: 1, stats: { bitrate: 6000000, rtt: 80 } },
+      ],
+    },
+  } });
+  const data = await h.api.fetchRIST({ page: 'http://localhost:8681/custom-json-path' });
+  assert.equal(data.bitrate, 2600);
+  assert.equal(data.rtt, 14);
+  assert.equal(h.urls.at(-1), 'http://localhost:8681/custom-json-path');
+  assert.equal(await h.api.fetchRIST({ page: 'ftp://localhost/nope' }), null);
+});
+
+test('RIST options and player-id example are documented without generator or CORS sections', () => {
+  const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+  const index = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(readme, /play_60a0055a7fdb436d92fab3a943f5c55c/);
+  assert.match(readme, /type: "RIST"/);
+  assert.match(readme, /ws:\/\/127\.0\.0\.1:8081/);
+  assert.match(readme, /ws:\/\/127\.0\.0\.1:8683/);
+  assert.doesNotMatch(readme, /### Optional visual generator|### CORS note|### Optionaler Generator/);
+  assert.match(index, /\["RIST", "moo RIST \(native \/ Docker\)"\]/);
+  assert.match(index, /data-setting="display.labels.rist_peers"/);
 });
