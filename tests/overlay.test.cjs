@@ -91,7 +91,7 @@ function createHarness(href = 'http://localhost/overlay.html', embedded = null) 
     'const EMBEDDED_SETTINGS = ' + JSON.stringify(embedded) + '; // GENERATED_OVERLAY_SETTINGS',
   ) : script;
   vm.runInContext(source + '\n' +
-    'globalThis.__test = { fetchOpenIRL, fetchOpenRTMP, fetchSRT, fetchNGINX, fetchRIST, parseRISTStats, normalized, render, recordSample, history };', context);
+    'globalThis.__test = { fetchOpenIRL, fetchOpenRTMP, fetchSRT, fetchNGINX, fetchRIST, parseRISTStats, getBitrate, normalized, render, recordSample, history };', context);
 
   return {
     api: context.__test,
@@ -474,4 +474,29 @@ test('RIST options and player-id example are documented without generator or COR
   assert.doesNotMatch(readme, /### Optional visual generator|### CORS note|### Optionaler Generator/);
   assert.match(index, /\["RIST", "moo RIST \(native \/ Docker\)"\]/);
   assert.match(index, /data-setting="display.labels.rist_peers"/);
+});
+
+test('RIST offline stats immediately try the next configured server', async () => {
+  const h = createHarness('http://localhost/overlay.html', {
+    servers: [
+      { type: 'RIST', page: 'ws://localhost:8683', show_rtt: true },
+      { type: 'OpenRTMP', page: 'http://localhost:8888/stats', key: 'sts_test', show_rtt: true },
+    ],
+  });
+  h.respondJson({ bitrate_kbps: 4100, rtt_ms: 22 });
+  const pending = h.api.getBitrate();
+  assert.equal(h.sockets.length, 1);
+  h.sockets[0].emit({
+    'receiver-stats': {
+      flowinstant: { dead: 0, peers: [{ dead: 1, stats: { bitrate: 4000000, rtt: 30 } }] },
+    },
+  });
+  const result = await pending;
+  assert.equal(result.server.type, 'OpenRTMP');
+  assert.equal(result.data.bitrate, 4100);
+  assert.equal(h.urls.length, 1);
+  assert.equal(h.urls[0], 'http://localhost:8888/stats?key=sts_test');
+  const again = await h.api.getBitrate();
+  assert.equal(again.server.type, 'OpenRTMP');
+  assert.equal(h.sockets.length, 1);
 });
