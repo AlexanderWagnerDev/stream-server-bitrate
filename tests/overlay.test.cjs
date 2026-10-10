@@ -17,10 +17,19 @@ class Element {
     this.className = '';
     this.style = {};
     this.textContent = '';
+    this.attributes = {};
   }
 
   appendChild(child) {
     this.children.push(child);
+  }
+
+  append(...children) {
+    this.children.push(...children);
+  }
+
+  setAttribute(name, value) {
+    this.attributes[name] = value;
   }
 
   replaceChildren(...children) {
@@ -28,7 +37,7 @@ class Element {
   }
 }
 
-function createHarness(href = 'http://localhost/overlay.html') {
+function createHarness(href = 'http://localhost/overlay.html', embedded = null) {
   const overlay = new Element();
   const urls = [];
   let result = { ok: false };
@@ -37,6 +46,7 @@ function createHarness(href = 'http://localhost/overlay.html') {
     body: new Element(),
     documentElement: { style: { setProperty() {} } },
     createElement: () => new Element(),
+    createElementNS: () => new Element(),
     getElementById: (id) => id === 'overlay' ? overlay : null,
   };
 
@@ -54,8 +64,12 @@ function createHarness(href = 'http://localhost/overlay.html') {
   });
 
   // The page's polling timer is a stub. Interrogate adapters directly.
-  vm.runInContext(script + '\n' +
-    'globalThis.__test = { fetchOpenIRL, fetchOpenRTMP, fetchSRT, normalized, render };', context);
+  const source = embedded ? script.replace(
+    'const EMBEDDED_SETTINGS = null; // GENERATED_OVERLAY_SETTINGS',
+    'const EMBEDDED_SETTINGS = ' + JSON.stringify(embedded) + '; // GENERATED_OVERLAY_SETTINGS',
+  ) : script;
+  vm.runInContext(source + '\n' +
+    'globalThis.__test = { fetchOpenIRL, fetchOpenRTMP, fetchSRT, normalized, render, recordSample, history };', context);
 
   return {
     api: context.__test,
@@ -180,4 +194,52 @@ test('interactive demo options apply indicators, orientation, and two SRTLA link
 test('unknown theme does not escape the safe preset allowlist', () => {
   const h = createHarness('http://localhost/overlay.html?demo=1&preset=unknown');
   assert.match(h.overlay.className, /preset-classic/);
+});
+
+test('history graph creates SVG paths for bitrate and RTT without library dependencies', () => {
+  const h = createHarness('http://localhost/overlay.html', {
+    servers: [{ type: 'OpenRTMP', page: 'https://example.invalid/stats', show_rtt: true }],
+    design: { preset: 'glass', layout: 'dashboard', colors: { green: '#00ff00' } },
+    display: {
+      graph: true, rtt_graph: true, bitrate_bar: true, uptime: true,
+      status: true, title: 'My stream', history_points: 6,
+      graph_width: 320, graph_height: 100, bar_max: 6000,
+    },
+  });
+  for (const bitrate of [3200, 3500, 3300, 3600, 3400]) {
+    h.api.recordSample({ data: { bitrate, rtt: 35 }, server: { show_rtt: true } });
+  }
+  const data = { bitrate: 3400, rtt: 35, uptime: 120 };
+  h.api.render({ data, server: { type: 'OpenRTMP', show_rtt: true } });
+  const charts = h.overlay.children.filter(element => element.className === 'chart');
+  assert.equal(charts.length, 2);
+  assert.ok(charts.every(el => el.children[1].children.some(node =>
+    node.attributes.d && node.attributes.d.startsWith('M'),
+  )));
+  const bar = h.overlay.children.find(element => element.className.includes('bar-widget'));
+  assert.ok(bar);
+  assert.match(bar.children[1].children[0].style.width, /^56/);
+  assert.match(h.overlay.className, /layout-dashboard/);
+});
+
+test('history is capped and offline polls create gaps instead of zeros', () => {
+  const h = createHarness('http://localhost/overlay.html', {
+    display: { history_points: 5, graph: true },
+  });
+  for (let i = 0; i < 10; i++) h.api.recordSample({ data: { bitrate: 3300 + i, rtt: 20 } });
+  h.api.recordSample(null);
+  assert.equal(h.api.history.length, 5);
+  assert.equal(h.api.history[4], null);
+  h.api.render(null);
+  assert.ok(h.overlay.children.some(el => el.className === 'chart'));
+});
+
+test('generator template is replaceable and GitHub Pages builder has safe export path', () => {
+  const generator = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const marker = 'const EMBEDDED_SETTINGS = null; // GENERATED_OVERLAY_SETTINGS';
+  assert.ok(html.includes(marker));
+  assert.ok(generator.includes(marker));
+  assert.ok(generator.includes('fetch("./colorBitrate.html"'));
+  assert.ok(generator.includes('bitrate-overlay-preview'));
+  assert.ok(generator.includes('never sends your stream keys'));
 });
