@@ -631,7 +631,8 @@
         const state = ristSocketState(url.toString());
         if (!state) return null;
         const maxAge = Math.max(5000, interval * 3);
-        if (state.data && Date.now() - state.updatedAt <= maxAge) return state.data;
+        // A recent offline report is a valid snapshot too: fall back immediately.
+        if (state.updatedAt && Date.now() - state.updatedAt <= maxAge) return state.data;
         // A new message is needed once stats become stale.
         if (state.socket.readyState >= 2) return null;
         return await ristWaitForMessage(state);
