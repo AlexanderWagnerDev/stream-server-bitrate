@@ -849,12 +849,15 @@
     // Built-in example mode uses synthetic values, never user-provided credentials.
     const previewParams = new URL(window.location.href).searchParams;
     const demoMode = previewParams.get("demo") === "1";
+    let demoServerPreview = { show_label: false, label: "" };
     const samplePreview = () => {
       const result = { data: {
         bitrate: 3480, rtt: 46, throughput: 3720, uptime: 3825,
         peers: [{ bitrate: 1900, jitter: 2.3 }, { bitrate: 1580, jitter: 3.8 }],
       }, server: {
-        type: "OpenIRL", show_rtt: true, show_label: false, show_throughput: true,
+        type: "OpenIRL", show_rtt: true,
+        show_label: demoServerPreview.show_label, label: demoServerPreview.label,
+        show_throughput: true,
         peer_display: previewParams.get("srtla") === "1" ? "details" : "off",
         max_peers: 2,
       } };
@@ -907,6 +910,13 @@
           }
           if (cfg.display && typeof cfg.display === "object") Object.assign(display, cfg.display);
           if (cfg.thresholds && typeof cfg.thresholds === "object") Object.assign(thresholds, cfg.thresholds);
+          if (cfg.serverPreview && typeof cfg.serverPreview === "object") {
+            demoServerPreview = {
+              show_label: cfg.serverPreview.show_label === true,
+              label: typeof cfg.serverPreview.label === "string"
+                ? cfg.serverPreview.label.slice(0, 100) : "",
+            };
+          }
           applyDesign();
           samplePreview();
         });
