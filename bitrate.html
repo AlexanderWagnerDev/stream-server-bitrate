@@ -201,9 +201,19 @@
       border: var(--border-width) solid var(--border);
       border-radius: 3px;
       background: var(--surface);
+      flex-wrap: wrap;
+      max-width: 100%;
     }
-    #overlay.preset-ticker .row + .row { border-left: 1px solid var(--border); padding-left: 13px; }
-    #overlay.preset-ticker .row { font-size: calc(var(--font-size) * 0.9); }
+    #overlay.preset-ticker .row + .row {
+      border-left: 1px solid var(--border);
+      padding-left: 13px;
+      flex-wrap: wrap;
+    }
+    #overlay.preset-ticker .row {
+      font-size: calc(var(--font-size) * 0.9);
+      min-width: 0;
+      max-width: 100%;
+    }
 
     /* Metric layout is independent of the decorative preset. */
     #overlay.layout-grid,
@@ -236,10 +246,10 @@
     .bar-fill { height: 100%; background: currentColor; transition: width .2s linear; }
     .metric-status { font-size: var(--label-size); letter-spacing: .1em; font-weight: 700; }
     #overlay .row.detail { max-width: 100%; }
-    #overlay.layout-horizontal .row, #overlay.layout-compact .row,
-    #overlay.preset-ticker .row { min-width: 0; max-width: 100%; }
-    #overlay.preset-ticker { flex-wrap: wrap; max-width: 100%; }
-    #overlay.preset-ticker .row + .row { flex-wrap: wrap; }
+    #overlay.layout-horizontal .row, #overlay.layout-compact .row {
+      min-width: 0;
+      max-width: 100%;
+    }
     @media (max-width: 360px) {
       #overlay.layout-grid, #overlay.layout-dashboard, #overlay.layout-split {
         grid-template-columns: minmax(0, 1fr);

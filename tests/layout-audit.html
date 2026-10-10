@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><title>Overlay layout audit</title></head>
 <body>
 <output id="audit-result" aria-live="off">RUNNING</output>
-<script>
+<script type="module">
 "use strict";
 const presets = ["classic", "minimal", "pill", "card", "glass", "neon",
   "broadcast", "terminal", "outline", "scoreboard", "gradient", "ticker"];
@@ -79,9 +79,11 @@ async function runAudit() {
   const output = document.getElementById("audit-result");
   output.textContent = failures.length ? "FAIL " + failures.join("; ") : "PASS: 18 layout checks";
 }
-runAudit().catch(error => {
+try {
+  await runAudit();
+} catch (error) {
   document.getElementById("audit-result").textContent = "FAIL " + error;
-});
+}
 </script>
 </body>
 </html>

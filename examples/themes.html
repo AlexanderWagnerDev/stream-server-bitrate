@@ -152,7 +152,11 @@
     const showPeers = document.getElementById("srtla").value === "1";
     const largeText = Number(document.getElementById("fontSize").value) > 28;
     for (const frame of document.querySelectorAll("iframe[data-preset]")) {
-      frame.parentElement.style.height = (showPeers ? (largeText ? 340 : 270) : 190) + "px";
+      let stageHeight = 190;
+      if (showPeers) {
+        stageHeight = largeText ? 340 : 270;
+      }
+      frame.parentElement.style.height = stageHeight + "px";
       const u = new URL("../bitrate.html", window.location.href);
       u.search = params.toString();
       u.searchParams.set("preset", frame.dataset.preset);
