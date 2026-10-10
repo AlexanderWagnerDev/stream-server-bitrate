@@ -281,6 +281,11 @@
       // Node-Media-Server
       // { type: "NMS", page: "http://localhost:8000/api/streams/live/feed1" },
 
+      // RIST receiver stats from moo-the-cow StatsServer.
+      // Native defaults to ws://127.0.0.1:8081; Docker maps 8683 -> 8081.
+      // { type: "RIST", page: "ws://127.0.0.1:8683", show_rtt: true,
+      //   peer_display: "details", max_peers: 4 },
+
       // nginx-rtmp /stat XML
       // { type: "NGINX", page: "http://localhost/stat", key: "live" },
     ];
@@ -347,6 +352,7 @@
         rtt: "RTT",
         throughput: "NETWORK",
         peers: "SRTLA",
+        rist_peers: "RIST",
         link: "LINK",
         jitter: "jitter",
         peer_separator: " · ",
@@ -534,10 +540,111 @@
       }
     };
 
+    // moo-the-cow's RIST StatsServer exposes the libRIST receiver-stats
+    // payload via WebSocket (native :8081, Docker published :8683).
+    // peer.stats.bitrate is in bits/second. Convert to decimal kb/s to
+    // match this overlay's existing thresholds, excluding dead peers.
+    const parseRISTStats = (payload) => {
+      const flow = payload?.["receiver-stats"]?.flowinstant;
+      if (!flow || Number(flow.dead) === 1 || !Array.isArray(flow.peers)) return null;
+      const peers = flow.peers.filter(peer => Number(peer?.dead) !== 1);
+      const active = peers.map(peer => ({
+        bitrate: numeric(peer?.stats?.bitrate),
+        rtt: numeric(peer?.stats?.rtt),
+      })).filter(peer => peer.bitrate !== null && peer.bitrate > 0);
+      if (!active.length) return null;
+      const kbps = active.reduce((total, peer) => total + peer.bitrate, 0) / 1000;
+      const rtts = active.map(peer => peer.rtt).filter(value => value !== null && value >= 0);
+      const rtt = rtts.length ? rtts.reduce((total, value) => total + value, 0) / rtts.length : null;
+      const stats = normalized(kbps, rtt);
+      if (!stats) return null;
+      return {
+        ...stats,
+        peers: active.map(peer => ({
+          bitrate: peer.bitrate / 1000,
+          jitter: null, // Not guaranteed by libRIST's receiver peer statistics.
+        })),
+      };
+    };
+
+    // Reuse one socket per StatsServer endpoint. Polling the current snapshot
+    // is cheap; stale or closed sockets fall back to the next configured server.
+    const ristSockets = new Map();
+    const ristSocketState = (url) => {
+      if (typeof WebSocket !== "function") return null;
+      const existing = ristSockets.get(url);
+      if (existing && existing.socket.readyState < 2) return existing;
+      const state = { socket: null, data: null, updatedAt: 0, listeners: new Set() };
+      try {
+        const socket = new WebSocket(url);
+        state.socket = socket;
+        ristSockets.set(url, state);
+        const notify = () => {
+          for (const listener of state.listeners) listener(state.data);
+          state.listeners.clear();
+        };
+        socket.onmessage = event => {
+          let payload;
+          try {
+            payload = JSON.parse(event.data);
+          } catch {
+            return;
+          }
+          // Ignore unrelated messages such as acknowledgements.
+          if (!payload || !Object.hasOwn(payload, "receiver-stats")) return;
+          state.data = parseRISTStats(payload);
+          state.updatedAt = Date.now();
+          notify();
+        };
+        socket.onclose = () => {
+          state.data = null;
+          state.updatedAt = 0;
+          notify();
+        };
+        socket.onerror = () => socket.close();
+        return state;
+      } catch {
+        ristSockets.delete(url);
+        return null;
+      }
+    };
+
+    const ristWaitForMessage = state => new Promise(resolve => {
+      let timer;
+      const finish = data => {
+        clearTimeout(timer);
+        state.listeners.delete(finish);
+        resolve(data);
+      };
+      state.listeners.add(finish);
+      timer = setTimeout(() => finish(null), request_timeout);
+    });
+
+    const fetchRIST = async ({ page }) => {
+      try {
+        const url = new URL(page, window.location.href);
+        if (url.protocol === "http:" || url.protocol === "https:") {
+          // Also accepts a user-specified HTTP JSON stats URL, when provided.
+          return parseRISTStats(await tryFetch(url.toString()));
+        }
+        if (url.protocol !== "ws:" && url.protocol !== "wss:") return null;
+        const state = ristSocketState(url.toString());
+        if (!state) return null;
+        const maxAge = Math.max(5000, interval * 3);
+        if (state.data && Date.now() - state.updatedAt <= maxAge) return state.data;
+        // A new message is needed once stats become stale.
+        if (state.socket.readyState >= 2) return null;
+        return await ristWaitForMessage(state);
+      } catch {
+        return null;
+      }
+    };
+
     const fetchers = {
       SRT: fetchSRT,
       OpenIRL: fetchOpenIRL,
       OpenRTMP: fetchOpenRTMP,
+      RIST: fetchRIST,
       NMS: fetchNMS,
       NGINX: fetchNGINX,
     };
@@ -752,7 +859,8 @@
           !server.peer_display || server.peer_display === "off") return [];
       const linkWord = data.peers.length === 1 ? labelText("links_singular") : labelText("links_plural");
       const countValue = [data.peers.length, linkWord].filter(Boolean).join(" ");
-      const rows = [makeRow(countValue, "detail", labelText("peers"))];
+      const peerLabel = server.type === "RIST" ? labelText("rist_peers") : labelText("peers");
+      const rows = [makeRow(countValue, "detail", peerLabel)];
       if (server.peer_display !== "details") return rows;
       const maxPeers = Math.max(0, Math.min(16, Number(server.max_peers) || 4));
       for (const [index, peer] of data.peers.slice(0, maxPeers).entries()) {
