@@ -104,6 +104,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
       <label>RTT label<input maxlength="100" data-setting="display.labels.rtt"></label>
       <label>Network throughput label<input maxlength="100" data-setting="display.labels.throughput"></label>
       <label>SRTLA connections label<input maxlength="100" data-setting="display.labels.peers"></label>
+      <label>RIST connections label<input maxlength="100" data-setting="display.labels.rist_peers"></label>
       <label>Link prefix (e.g. LINK 1)<input maxlength="100" data-setting="display.labels.link"></label>
       <label>Jitter suffix<input maxlength="100" data-setting="display.labels.jitter"></label>
       <label>Peer values separator<input maxlength="100" data-setting="display.labels.peer_separator"></label>
@@ -266,7 +267,7 @@ const defaults = {
     title: "",
     labels: {
       bitrate: "BITRATE", rtt: "RTT", throughput: "NETWORK",
-      peers: "SRTLA", link: "LINK", jitter: "jitter",
+      peers: "SRTLA", rist_peers: "RIST", link: "LINK", jitter: "jitter",
       peer_separator: " · ", empty_value: "–",
       uptime: "UPTIME", status: "STATUS", live: "LIVE", offline: "OFFLINE",
       bitrate_graph: "BITRATE HISTORY", rtt_graph: "RTT HISTORY",
@@ -290,7 +291,7 @@ const allowedWidgets = {
   rtt_graph: "RTT history graph",
   throughput: "Network throughput",
   uptime: "Streaming uptime",
-  peers: "SRTLA connection details",
+  peers: "SRTLA / RIST connection details",
 };
 const $ = id => document.getElementById(id);
 const htmlEscape = value => String(value ?? "").replace(/[&<>"']/g, c => ({
@@ -315,6 +316,7 @@ const serverFields = [
   ["OpenRTMP", "OpenRTMP /stats?key="],
   ["OpenIRL", "OpenIRL SLS (SRT / SRTLA)"],
   ["SRT", "Traditional SRT-Live-Server"],
+  ["RIST", "moo RIST (native / Docker)"],
   ["NMS", "Node-Media-Server"],
   ["NGINX", "nginx-rtmp"],
 ];
@@ -332,7 +334,7 @@ const sourceCheckbox = (index, key, text, checked) =>
   '" data-key="' + key + '"' + (checked ? ' checked' : '') + '>' + text + '</label>';
 
 const sourceKeyField = (server, index) => {
-  if (server.type === "NMS") return '';
+  if (server.type === "NMS" || server.type === "RIST") return '';
   if (server.type === "SRT") {
     return sourceTextField(index, "publisher", "Publisher path", server.publisher);
   }
@@ -344,12 +346,15 @@ const sourceKeyField = (server, index) => {
 };
 
 const openIrlFields = (server, index) => {
-  if (server.type !== "OpenIRL") return '';
+  if (server.type !== "OpenIRL" && server.type !== "RIST") return '';
   const options = ["off", "count", "details"].map(value =>
     '<option value="' + value + '"' + (server.peer_display === value ? ' selected' : '') +
     '>' + value + '</option>').join('');
-  return sourceCheckbox(index, "show_throughput", "Show throughput", server.show_throughput) +
-    '<label>SRTLA peer info<select data-server="' + index +
+  const throughputField = server.type === "OpenIRL" ?
+    sourceCheckbox(index, "show_throughput", "Show throughput", server.show_throughput) : '';
+  const peersLabel = server.type === "RIST" ? "RIST peer info" : "SRTLA peer info";
+  return throughputField +
+    '<label>' + peersLabel + '<select data-server="' + index +
     '" data-key="peer_display">' + options + '</select></label>' +
     '<label>Maximum links<input type="number" min="1" max="16" data-server="' +
     index + '" data-key="max_peers" value="' + htmlEscape(server.max_peers) + '"></label>';
@@ -366,7 +371,8 @@ const renderServer = (server, index) => {
   const fields = '<div class="fields"><label class="full">Server type' +
     '<select data-server="' + index + '" data-key="type">' +
     serverSelectOptions(server) + '</select></label>' +
-    sourceTextField(index, "page", "Stats URL", server.page, "https://server.example/stats") +
+    sourceTextField(index, "page", "Stats URL", server.page,
+      server.type === "RIST" ? "ws://127.0.0.1:8683" : "https://server.example/stats") +
     sourceKeyField(server, index) +
     sourceTextField(index, "label", "Label", server.label) +
     sourceCheckbox(index, "show_rtt", "Show RTT", server.show_rtt) +
