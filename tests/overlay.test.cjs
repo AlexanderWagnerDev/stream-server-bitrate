@@ -236,6 +236,9 @@ test('history is capped and offline polls create gaps instead of zeros', () => {
 
 test('generator template is replaceable and GitHub Pages builder has safe export path', () => {
   const generator = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const generatorJs = generator.match(/<script>([\\s\\S]*?)<\\/script>/)?.[1];
+  assert.ok(generatorJs, 'generator has an inline script');
+  assert.doesNotThrow(() => new vm.Script(generatorJs), 'generator JavaScript parses');
   const marker = 'const EMBEDDED_SETTINGS = null; // GENERATED_OVERLAY_SETTINGS';
   assert.ok(html.includes(marker));
   assert.ok(generator.includes(marker));
