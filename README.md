@@ -1,214 +1,242 @@
-# Stream Server Bitrate Overlay
+# 📡 Stream Server Bitrate Overlay
 
-A lightweight, single-file, transparent HTML overlay for **OBS Browser Sources**. Show live bitrate, RTT and optional OpenIRL SRTLA connection details with server fallback and custom visual presets. No build step or external JavaScript libraries.
+[![GitHub License](https://img.shields.io/github/license/AlexanderWagnerDev/stream-server-bitrate?style=flat-square)](https://github.com/AlexanderWagnerDev/stream-server-bitrate/blob/main/LICENSE)
+[![HTML](https://img.shields.io/badge/HTML-orange?style=flat-square&logo=html5&logoColor=white)](bitrate.html)
 
-## Visual OBS Overlay Builder (GitHub Pages)
-
-**[Open the visual builder (after GitHub Pages is enabled)](https://alexanderwagnerdev.github.io/stream-server-bitrate/)** or open [`index.html`](index.html) using a local web server (`python3 -m http.server 8000`; then visit `http://localhost:8000/`). The builder is a standalone static website requiring **no database, login, third-party service, analytics or API access**. It does not send your stats keys anywhere; all configuration happens inside your browser.
-
-The builder includes:
-
-- **Bitrate and RTT history graphs** with up to 600 in-memory samples, colored lines, optional area fill, configurable history length and auto/fixed scale. Offline polls create gaps rather than plotting incorrect zero values. A 60-sample history at a 2-second poll interval represents roughly two minutes.
-- **Toggleable widgets** for current bitrate, RTT, online/offline state, stream uptime (if provided by the API), OpenIRL throughput/SRTLA connections, a bitrate progress bar, a bitrate history graph and a separate RTT graph.
-- **Reorderable widgets** (move up/down), six independent metric layouts (`vertical`, `horizontal`, `compact`, `grid`, `split`, `dashboard`) and 12 visual theme presets.
-- Advanced **appearance controls**: colors, background transparency, typography, number/label sizing, spacing, position, framing, offline text, bitrate units, metric indicator shape, and style.
-- **Multiple fallback servers**; configurable source type, stats URL, stats/player key, status labels and refresh/timeout values.
-- Configurable bitrate/RTT color thresholds, a live **synthetic-data preview** (no stats endpoint contacted), adjustable OBS preview dimensions, JSON settings import/export and **downloadable standalone OBS HTML file** with settings included.
-
-To use the generated result in OBS: download the HTML, create a Browser Source, enable **Local file**, select the downloaded HTML and match its preview width and height in OBS. No external chart library or runtime dependency is necessary; the graph uses inline SVG. The generated overlay can also be used as a hosted page only if the hosting configuration protects the stats key and permits browser cross-origin access.
-
-**GitHub Pages deployment:** after merging the PR, configure repository Settings → Pages → **Source: GitHub Actions**. The `Deploy overlay builder to GitHub Pages` workflow packages the static frontend and deploys on pushes to `main`. The website will typically be at `https://alexanderwagnerdev.github.io/stream-server-bitrate/`, but is **not live until Pages is enabled and deployment succeeds**. The [GitHub Actions overlay tests](.github/workflows/tests.yml) also capture real browser screenshots of both the theme gallery and the generator as downloadable artifacts.
-
-**Security and limitations:** The editor never fetches your real stats endpoint. The browser preview deliberately receives *only appearance, widget and threshold settings*, not URLs or keys. Your downloaded HTML/JSON does contain credentials needed to access stream stats; don't commit those files to public GitHub repositories or share them publicly. CORS and mixed-content restrictions apply when OBS accesses real stats endpoints. Stream graphs are session-local, reset when OBS reloads the page, and skip data while offline.
-
-## Supported server stats
-
-| Type | Stats format | URL/key |
-| --- | --- | --- |
-| `SRT` | Traditional SRT-Live-Server `{publishers: {...}}` JSON | `page` + `publisher` path |
-| `OpenIRL` | **OpenIRL SLS modern stats**, for both standard SRT and SRTLA | `/stats/<player_id>` (use `page` + `key`) |
-| `OpenRTMP` | OpenRTMP `librtmp2-server` public JSON | `/stats?key=<stats_key>` |
-| `NMS` | Node-Media-Server JSON | `page` |
-| `NGINX` | nginx-rtmp `/stat` XML | `page` + `key` application tag |
-
-**Important:** `SRT` in the configuration means the **traditional SLS stats format**, *not* "all streams using the SRT protocol." OpenIRL SLS, whether receiving regular SRT or SRTLA, should use `type: "OpenIRL"` when its modern `/stats/<player_id>` API is available.
-
-### OpenIRL SRT vs SRTLA
-
-Both use the same public endpoint and expose `publisher.bitrate` (kb/s) and `publisher.rtt` (ms). When valid SRTLA stats are available, the server **overrides** `publisher.bitrate` with its aggregated `totalBitrate` and adds `publisher.peers[]` with per-link bitrate, throughput, jitter (ms) and uptime. The publisher RTT is from the underlying SRT stats and **is not a per-peer RTT**. The overlay uses the server-provided aggregate, **never sums link bitrates** to guess the total. Peer information is optional and may not be present on every OpenIRL deployment.
-
-The deprecated OpenIRL `?legacy=1` format instead uses `publishers.live` and lacks peer details; configure the modern endpoint **without** `legacy=1`.
-
-## Setup
-
-Download [bitrate.html](bitrate.html), open it in a text editor, and change the `servers` array at the beginning of its `<script>` section.
-
-```js
-const interval = 2000;
-const request_timeout = 4000;
-
-const servers = [
-  // Try OpenIRL SLS first. The "key" here is the player ID.
-  { type: "OpenIRL", page: "http://127.0.0.1:8080/stats", key: "live",
-    show_rtt: true, show_label: true, peer_display: "details", max_peers: 4 },
-
-  // Fall back to OpenRTMP. The "key" is the per-stream stats_key.
-  { type: "OpenRTMP", page: "http://127.0.0.1:8081/stats", key: "sts_your_stats_key",
-    show_rtt: true, show_label: true },
-
-  // Traditional SRT-Live-Server format (if you use that implementation):
-  // { type: "SRT", page: "http://127.0.0.1:8181/stats",
-  //   publisher: "publish/live/test", show_rtt: true },
-
-  // { type: "NMS", page: "http://127.0.0.1:8000/api/streams/live/feed1" },
-  // { type: "NGINX", page: "http://127.0.0.1/stat", key: "live" },
-];
-```
-
-Only the **first server with a valid positive bitrate** is displayed. When the current server is offline, the next is tried on each poll. Fetch requests have a timeout, and polls do not overlap. A zero bitrate means no signal. For an OpenIRL server you can also supply `page: "http://127.0.0.1:8080/stats/live"` without `key`. For OpenRTMP you can supply the complete `page: "http://127.0.0.1:8080/stats?key=sts_..."` without a separate `key`.
-
-### Per-server options
-
-| Option | Description |
-| --- | --- |
-| `type` | One of `SRT`, `OpenIRL`, `OpenRTMP`, `NMS`, `NGINX` |
-| `page` | HTTP(S) stats URL |
-| `publisher` | Traditional SLS publisher path (only for `SRT`) |
-| `key` | OpenIRL **player ID**; OpenRTMP **stats key**; NGINX application tag |
-| `label` | Custom label when `show_label: true` |
-| `show_label` | Show the server label next to the bitrate |
-| `show_rtt` | Show RTT when the source supplies it |
-| `show_throughput` | Show raw network throughput for OpenIRL, if supplied |
-| `peer_display` | OpenIRL SRTLA only: `"off"` (default), `"count"`, or `"details"` |
-| `max_peers` | Number of SRTLA peer rows in `"details"` mode (default 4, max 16) |
-
-SRTLA details show **LINK 1**, **LINK 2**, etc. with bitrate and jitter; the number of peer rows and all measurements come from the server, not from inferred connections. Individual links are deliberately displayed in a neutral color because the overall bitrate thresholds do not apply to each link in isolation.
-
-## Overlay designs: 12 themes + interactive previews
-
-![Preview comparison of 12 OBS bitrate overlay presets](docs/theme-previews.svg)
-
-**[Open the interactive theme gallery](examples/themes.html)** – download this repository and open `examples/themes.html` in a browser. Each card embeds **the actual overlay**, with fake bitrate/RTT values so you can compare designs safely without a running server or stats credentials. Try horizontal vs vertical layout, accent colors, status indicators, text size, and example SRTLA connection details. The SVG above is a design contact sheet; the gallery is the live-rendered source of truth.
-
-| Preset | Visual style |
-| --- | --- |
-| `classic` | Original transparent, color-coded bitrate and RTT |
-| `minimal` | Bare numbers, no status dot |
-| `pill` | Rounded individual metric capsules |
-| `card` | One rounded, dark statistics card |
-| `glass` | Frosted translucent surface and subtle blur |
-| `neon` | Accent outline and glowing measurements |
-| `broadcast` | Flat lower third with a prominent accent bar |
-| `terminal` | Monospace retro command-line display |
-| `outline` | Transparent metric frames |
-| `scoreboard` | Segmented counter blocks for event or studio overlays |
-| `gradient` | Accent-tinted gradient panel |
-| `ticker` | Compact horizontal information ribbon |
-
-All themes work with every configured server source; none requires a particular bitrate API. Change the `design` object in `bitrate.html`:
-
-```js
-const design = {
-  preset: "neon",                  // One of the 12 preset names above
-  layout: "vertical",              // vertical | horizontal
-  align: "right",                  // left | center | right
-  font_family: "'Segoe UI', 'Inter', system-ui, sans-serif",
-  font_size: 22,                   // Main value, px
-  label_size: 11,
-  font_weight: 700,
-  gap: 4,
-  row_padding: "6px 12px",
-  padding: "6px 10px",             // Outer OBS padding
-  corner_radius: 12,
-  border_width: 1,
-  background: "rgba(12, 18, 30, 0.82)",
-  border_color: "rgba(255, 255, 255, 0.15)",
-  accent_color: "#38bdf8",
-  letter_spacing: 0,
-  indicator_size: 8,
-  indicator_style: "dot",          // dot | square | bar | none
-  text_shadow: true,
-  show_dot: true,                  // Existing option; false hides all dots
-  show_bitrate_label: false,
-  show_units: true,
-  bitrate_unit: "kb/s",            // kb/s | Mb/s
-  mbps_decimals: 2,
-  offline_text: "NO SIGNAL",
-  colors: {
-    green: "#4ade80",
-    orange: "#fb923c",
-    red: "#f87171",
-    muted: "rgba(255, 255, 255, 0.65)",
-  },
-};
-```
-
-On pull requests, the **Overlay tests** GitHub Actions workflow also captures an **actual Chrome screenshot** of the complete theme gallery. Open the latest successful workflow run and download the `obs-overlay-design-previews` artifact. Unlike the illustrative SVG above, this PNG is captured directly from `examples/themes.html` running the real overlay previews.
-
-The selected preset provides a layout and decorative frame. Your own colors, labels, font sizes, background opacity, and status threshold settings still apply. `classic` remains the backward-compatible default; the existing `show_dot` field is still supported.
-
-### Local preview with synthetic statistics
-
-You can also open a **single** design directly, without configuring any server:
-
-```text
-bitrate.html?demo=1&preset=glass
-```
-
-`demo=1` is opt-in and only displays known synthetic values; it performs **no stats requests**. Remove the demo query parameter to use live data in OBS. Additional *demo-only* parameters: `layout=horizontal`, `indicator=bar`, `fontSize=26`, `accent=%2338bdf8`, `srtla=1`. For permanent settings, edit the `design` object. Never use a URL with `demo=1` as the live OBS source.
-
-Thresholds are independent of the display unit:
-
-| Status | Bitrate | RTT |
-| --- | --- | --- |
-| Green | > 2500 kb/s | < 120 ms |
-| Orange | 1200–2500 kb/s | 120–249.999 ms |
-| Red | ≤ 1200 kb/s | ≥ 250 ms |
-
-Adjust these in the `thresholds` object: `bitrate_orange`, `bitrate_red`, `rtt_orange`, `rtt_red`.
-
-## OBS Browser Source
-
-1. Add a **Browser Source** in OBS.
-2. Enable **Local file** and select `bitrate.html`.
-3. Set its dimensions to fit your chosen preset (for example 300 × 100 for classic; increase height when showing individual SRTLA links).
-4. Optionally enable **Shutdown source when not visible**.
-
-### Cross-origin access (CORS)
-
-HTML overlays use the browser's `fetch` API. The stats server must be **reachable from the device running OBS** and must allow the Browser Source origin through CORS.
-
-- OpenIRL SLS sends `Access-Control-Allow-Origin: *` on its stats responses.
-- **OpenRTMP's current HTTP server does not expose a CORS response header**. If OBS loads the overlay as a local file (`file://`) or from a different origin, the browser may block fetching OpenRTMP stats. Configure a same-origin reverse proxy or an explicitly permitted CORS header for `/stats` on your own server. Do **not** disable browser security globally.
-- A locally running server inside Docker is not necessarily `127.0.0.1` from the OBS computer. Use the actual reachable address.
-- An HTTPS-loaded overlay cannot fetch an HTTP endpoint if mixed-content rules block it; use HTTPS for stats too.
-
-OpenRTMP's `stats_key` grants access to stream statistics, so treat overlay files and URLs containing it as sensitive. **Never embed an OpenRTMP admin API bearer token** in this public overlay. Similarly, OpenIRL uses the *player ID*, not an admin API key.
-
-## Tests
-
-Tests use Node.js 22 or later without external packages:
-
-```sh
-node --test tests/overlay.test.cjs
-```
-
-GitHub Actions runs the test suite on pull requests and pushes to `main`.
-
-## License
-
-MIT — see [LICENSE](LICENSE). Originally based on [b3ck/server-bitrate-html](https://github.com/b3ck/server-bitrate-html).
+A lightweight, transparent HTML overlay that displays live bitrate and RTT with color-coded status — compatible with SRT-Live-Server, OpenIRL SRT/SRTLA, **OpenRTMP**, Node-Media-Server, and nginx-rtmp. Supports multiple servers with automatic fallback. The original single-file OBS overlay remains the primary feature; designs, charts and the optional generator extend it.
 
 ---
 
-# Deutsch – Kurzanleitung
+## ✨ Features
 
-Ein konfigurierbares OBS-Bitrate-Overlay mit automatischem Server-Fallback, 12 Design-Presets, Bitrate-/RTT-Verlaufsgraphen und einem visuellen Generator.
+- 🟢 **Color-coded status** — green / orange / red for both bitrate and RTT
+- 📡 **Multi-server support** — define multiple servers, the first responding one is used
+- 🔄 **Automatic fallback** — if the primary server is unavailable, the next is tried
+- 🎛️ **Five server types supported:** SRT-Live-Server, OpenIRL SRT/SRTLA, **OpenRTMP**, Node-Media-Server (NMS), nginx-rtmp
+- 🎨 **Optional designs & widgets** — 12 visual presets, customizable labels/layouts, optional bitrate and RTT graphs
+- 🛠️ **Optional visual generator** — convenient browser-based editor; not required to use the HTML overlay
+- 🪟 **Transparent background** — designed for OBS browser source overlays
+- ⚙️ **No dependencies** — single HTML file, no build tools required
 
-- **OpenIRL SLS (SRT und SRTLA):** `{ type: "OpenIRL", page: "http://server:8080/stats", key: "player_id", show_rtt: true }`. Bei SRTLA können mit `peer_display: "count"` oder `"details"` die Verbindungen und deren Bitraten/Jitter eingeblendet werden. Die Gesamtbitrate stammt direkt vom Server; RTT ist die Publisher-RTT, nicht die RTT jeder Verbindung.
-- **OpenRTMP librtmp2-server:** `{ type: "OpenRTMP", page: "http://server:8080/stats", key: "sts_...", show_rtt: true }`. Hier ist `key` der Stats-Key, kein API-Token. Bei Browser-Quellen **CORS beachten**, siehe oben.
-- **Altes SRT-Live-Server-JSON:** `type: "SRT"` erwartet ausdrücklich `publishers[publisher]`, nicht das moderne OpenIRL-Format.
-- **Darstellung:** 12 Presets: `classic`, `minimal`, `pill`, `card`, `glass`, `neon`, `broadcast`, `terminal`, `outline`, `scoreboard`, `gradient` und `ticker`. Zusätzlich einstellbar: Ausrichtung, Schrift, Farben, Abstände, Transparenz, Akzentfarbe, Rahmen, Status-Indikator sowie kb/s oder Mb/s. **[Beispielbilder](docs/theme-previews.svg)** und **[interaktive Vorschau](examples/themes.html)** (Repository herunterladen und lokal öffnen).
-- **Schwellenwerte:** Bitrate grün über 2500, orange bis 2500, rot bis 1200 kb/s. RTT grün unter 120, orange ab 120, rot ab 250 ms. Beide unter `thresholds` anpassbar.
+---
 
-In OBS eine Browser-Quelle mit **Lokale Datei** hinzufügen und `bitrate.html` oder die **generierte HTML-Datei** auswählen. Im [visuellen Generator](index.html) lassen sich Server, Schwellenwerte, Graphen, Widgets, Reihenfolge, Layouts, Designs und Darstellung einstellen. Über GitHub Pages erreichbar, sobald der PR gemergt, Pages aktiviert und das Deployment erfolgreich ist. Alternativ lokal mit `python3 -m http.server 8000` starten. Keine externen Bibliotheken nötig.
+## 📊 Color Thresholds
+
+### Bitrate
+
+| Color  | Condition           |
+|--------|---------------------|
+| 🟢 Green  | > 2500 kb/s      |
+| 🟠 Orange | 1200 – 2500 kb/s |
+| 🔴 Red    | ≤ 1200 kb/s      |
+
+### RTT
+
+| Color  | Condition      |
+|--------|----------------|
+| 🟢 Green  | < 120 ms    |
+| 🟠 Orange | 120 – 250 ms|
+| 🔴 Red    | ≥ 250 ms    |
+
+---
+
+## ⚙️ Configuration
+
+Open `bitrate.html` and edit the `servers` array near the top of the `<script>` section:
+
+```js
+const interval = 2000; // polling interval in ms
+
+const servers = [
+  // SRT-Live-Server (SLS)
+  { type: "SRT",     page: "http://127.0.0.1:8181/stats",    publisher: "publish/live/test", show_rtt: true },
+
+  // Modern OpenIRL SLS stats, both regular SRT and SRTLA; key = player ID
+  // { type: "OpenIRL", page: "http://127.0.0.1:8080/stats", key: "live", show_rtt: true,
+  //   peer_display: "details", max_peers: 4 },
+
+  // OpenRTMP public per-stream stats; key = stats_key, NOT an admin API token
+  // { type: "OpenRTMP", page: "http://127.0.0.1:8081/stats", key: "sts_your_stats_key", show_rtt: true },
+
+  // Node-Media-Server
+  // { type: "NMS",     page: "http://localhost:8000/api/streams/live/feed1" },
+  // { type: "NMS",     page: "http://admin:admin@localhost:8000/api/streams/live/feed1" },
+
+  // nginx-rtmp
+  // { type: "NGINX",   page: "http://localhost/stat",        key: "live" },
+];
+```
+
+### Server Types
+
+| Type       | Description                                           | Required fields     |
+|------------|-------------------------------------------------------|---------------------|
+| `SRT`      | SRT-Live-Server `/stats` JSON endpoint                | `page`, `publisher` |
+| `OpenIRL`  | Modern OpenIRL SLS `/stats/<player_id>` for SRT & SRTLA | `page`, `key` | 
+| `OpenRTMP` | Public OpenRTMP `/stats?key=<stats_key>` JSON           | `page`, `key` |
+| `NMS`      | Node-Media-Server REST API                            | `page`              |
+| `NGINX`    | nginx-rtmp `/stat` XML endpoint                       | `page`, `key`       |
+
+### Options per Server Entry
+
+| Option       | Type    | Description                                                  |
+|--------------|---------|--------------------------------------------------------------|
+| `type`       | string  | Server type: `"SRT"`, `"OpenIRL"`, `"OpenRTMP"`, `"NMS"`, `"NGINX"` |
+| `page`       | string  | Base URL of the stats endpoint                               |
+| `publisher`  | string  | Stream key path (SRT only)                                   |
+| `key`        | string  | OpenIRL player ID, OpenRTMP stats key or NGINX application name |
+| `show_rtt`   | boolean | Show RTT when the selected stats source supplies it        |
+| `show_label` | boolean | Show a small server-type badge next to the value             |
+| `label`      | string  | Optional custom server label                                |
+| `show_throughput` | boolean | OpenIRL: display network throughput when available |
+| `peer_display` | string | OpenIRL SRTLA: `"off"`, `"count"` or `"details"` |
+| `max_peers` | number | Maximum OpenIRL SRTLA peer rows                              |
+
+---
+
+## 🎨 Optional designs, graphs & custom labels
+
+The **default `bitrate.html` stays transparent and uses the original compact layout**. All enhancements are optional and work directly in the single HTML file:
+
+- **12 presets:** `classic`, `minimal`, `pill`, `card`, `glass`, `neon`, `broadcast`, `terminal`, `outline`, `scoreboard`, `gradient`, `ticker`.
+- **Six layouts:** vertical, horizontal, compact, grid, split, dashboard.
+- Optional live bitrate/RTT history graphs, bitrate bar, stream status, uptime and OpenIRL SRTLA link count/bitrate/jitter when supplied by the server.
+- Customize label and status text, graph titles, link/jitter text, units, colors, fonts and spacing. Set a label to an empty string to hide it. The `display.labels` object owns these visible strings; the `display` object controls widgets and order.
+- See the [12-design comparison image](docs/theme-previews.svg) or open the [interactive theme gallery](examples/themes.html) locally.
+
+The bitrate color thresholds are based on kb/s even when the number is displayed in Mb/s. RTT color thresholds use milliseconds. Peer jitter is a separate metric, not per-peer RTT, and the server's aggregate SRTLA bitrate is never calculated by summing peers.
+
+### Optional visual generator (not needed for normal use)
+
+Want to avoid editing HTML manually? Open [`index.html`](index.html) over a local HTTP server (for example `python3 -m http.server 8000`) or via GitHub Pages **after it has been enabled and deployed**. The optional generator offers live sample previews, all text-label settings, status thresholds, widgets, themes, server fallback, JSON configuration import/export, and a ready-to-use `bitrate.html` download. Generated files and JSON may contain stats keys and should not be uploaded publicly.
+
+GitHub Pages needs Settings → Pages → Source: **GitHub Actions**, followed by a successful deployment. The generator is a convenience, not a runtime dependency.
+
+### CORS note
+
+OBS Browser Sources enforce browser security rules. OpenIRL SLS supplies a permissive CORS header for stats, but OpenRTMP's current public stats endpoint does not; cross-origin or `file://` OBS usage may require a same-origin proxy or an explicit CORS response for `/stats`. Do not disable browser security to work around this. Use HTTPS stats when the overlay is hosted over HTTPS.
+
+---
+
+## 🖥️ OBS Setup
+
+1. In OBS, add a **Browser Source**
+2. Check **Local file** and point to `bitrate.html`
+3. Set width/height to fit your overlay layout (e.g. 300 × 80)
+4. Enable **Shutdown source when not visible** for best performance
+
+---
+
+## 📄 License
+
+See [LICENSE](LICENSE) for details.
+
+Based on [b3ck/server-bitrate-html](https://github.com/b3ck/server-bitrate-html).
+
+---
+
+# 📡 Stream Server Bitrate Overlay (Deutsch)
+
+Ein schlankes, **standardmäßig transparentes** HTML-Overlay, das Live-Bitrate und RTT farbkodiert anzeigt — kompatibel mit SRT-Live-Server, OpenIRL SRT/SRTLA, **OpenRTMP**, Node-Media-Server und nginx-rtmp. Mehrere Server mit automatischem Fallback. Das ursprüngliche Overlay bleibt das Hauptfeature; Designs, Graphen und Generator sind optionale Erweiterungen.
+
+---
+
+## ✨ Features
+
+- 🟢 **Farbkodierter Status** — Grün / Orange / Rot für Bitrate und RTT
+- 📡 **Multi-Server-Unterstützung** — mehrere Server eintragen, der erste antwortende wird verwendet
+- 🔄 **Automatischer Fallback** — bei Ausfall des primären Servers wird der nächste versucht
+- 🎛️ **Fünf Server-Typen unterstützt:** SRT-Live-Server, OpenIRL SRT/SRTLA, **OpenRTMP**, Node-Media-Server (NMS), nginx-rtmp
+- 🎨 **Optionale Designs & Widgets** — 12 Presets, einstellbare Texte/Layouts und Bitrate-/RTT-Verlaufsgrafen
+- 🛠️ **Optionaler Generator** — erleichtert die Konfiguration, ist aber nicht erforderlich
+- 🪟 **Transparenter Hintergrund** — für OBS Browser-Source-Overlays konzipiert
+- ⚙️ **Keine Abhängigkeiten** — einzelne HTML-Datei, kein Build-Tool nötig
+
+---
+
+## 📊 Farb-Schwellenwerte
+
+### Bitrate
+
+| Farbe  | Bedingung           |
+|--------|---------------------|
+| 🟢 Grün   | > 2500 kb/s      |
+| 🟠 Orange | 1200 – 2500 kb/s |
+| 🔴 Rot    | ≤ 1200 kb/s      |
+
+### RTT
+
+| Farbe  | Bedingung      |
+|--------|----------------|
+| 🟢 Grün   | < 120 ms    |
+| 🟠 Orange | 120 – 250 ms|
+| 🔴 Rot    | ≥ 250 ms    |
+
+---
+
+## ⚙️ Konfiguration
+
+`bitrate.html` öffnen und das `servers`-Array im `<script>`-Bereich anpassen:
+
+```js
+const interval = 2000; // Abfrageintervall in ms
+
+const servers = [
+  // SRT-Live-Server (SLS)
+  { type: "SRT",     page: "http://127.0.0.1:8181/stats",    publisher: "publish/live/test", show_rtt: true },
+
+  // Modernes OpenIRL SLS für SRT und SRTLA; key = Player-ID
+  // { type: "OpenIRL", page: "http://127.0.0.1:8080/stats", key: "live", show_rtt: true,
+  //   peer_display: "details", max_peers: 4 },
+
+  // OpenRTMP öffentliche Stats; key = Stats-Key, KEIN Admin-API-Token
+  // { type: "OpenRTMP", page: "http://127.0.0.1:8081/stats", key: "sts_your_stats_key", show_rtt: true },
+
+  // Node-Media-Server
+  // { type: "NMS",     page: "http://localhost:8000/api/streams/live/feed1" },
+
+  // nginx-rtmp
+  // { type: "NGINX",   page: "http://localhost/stat",        key: "live" },
+];
+```
+
+### Server-Typen
+
+| Typ        | Beschreibung                                              | Pflichtfelder       |
+|------------|-----------------------------------------------------------|---------------------|
+| `SRT`      | SRT-Live-Server `/stats` JSON-Endpoint                    | `page`, `publisher` |
+| `OpenIRL`  | Modernes OpenIRL SLS `/stats/<player_id>` für SRT/SRTLA | `page`, `key` |
+| `OpenRTMP` | Öffentliche OpenRTMP-Stats `/stats?key=<stats_key>`     | `page`, `key` |
+| `NMS`      | Node-Media-Server REST API                                | `page`              |
+| `NGINX`    | nginx-rtmp `/stat` XML-Endpoint                           | `page`, `key`       |
+
+---
+
+## 🎨 Optionale Designs, Graphen & frei änderbare Texte
+
+Die ursprüngliche `bitrate.html` bleibt **im Standard transparent**, kompakt und ohne zusätzliche Bibliotheken nutzbar. Optional gibt es zwölf Designs (`classic`, `minimal`, `pill`, `card`, `glass`, `neon`, `broadcast`, `terminal`, `outline`, `scoreboard`, `gradient`, `ticker`), sechs Layouts und einzeln aktivierbare Widgets.
+
+Bitrate- und RTT-Verlauf, Balken, Uptime, Status sowie SRTLA-Linkinformationen lassen sich ein-/ausblenden. **Alle sichtbaren Beschriftungen** – inklusive Einheiten, Jitter, Link-Texte, Diagrammtitel und Offline-/Online-Texte – sind über `display.labels` veränderbar. Ein leeres Label blendet den Text aus. [Designvergleich](docs/theme-previews.svg) · [Interaktive Vorschau](examples/themes.html).
+
+### Optionaler Generator für einfachere Einstellungen
+
+Wer die HTML-Datei nicht selbst bearbeiten möchte, nutzt den [Generator](index.html) lokal über einen HTTP-Server (z. B. `python3 -m http.server 8000`) oder später über GitHub Pages. Einstellungen können importiert, exportiert und als eigenständige `bitrate.html` für OBS heruntergeladen werden. Das **Overlay selbst braucht den Generator nicht**. Stats-Keys in exportierten HTML-/JSON-Dateien vertraulich behandeln.
+
+**Browser/CORS:** OpenRTMP liefert am aktuellen öffentlichen Stats-Endpunkt nicht automatisch den erforderlichen CORS-Header für browserbasierte Cross-Origin-Abfragen. Bei OBS kann ein Reverse Proxy bzw. passende CORS-Konfiguration notwendig sein. Die Browsersicherheit nicht deaktivieren.
+
+---
+
+## 🖥️ OBS-Setup
+
+1. In OBS eine **Browser-Quelle** hinzufügen
+2. **Lokale Datei** aktivieren und `bitrate.html` auswählen
+3. Breite/Höhe an das Overlay-Layout anpassen (z. B. 300 × 80)
+4. **Quelle deaktivieren, wenn nicht sichtbar** für beste Performance aktivieren
+
+---
+
+## 📄 Lizenz
+
+Details siehe [LICENSE](LICENSE).
+
+Basiert auf [b3ck/server-bitrate-html](https://github.com/b3ck/server-bitrate-html).
