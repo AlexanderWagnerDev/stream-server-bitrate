@@ -127,17 +127,17 @@ test('OpenIRL missing publisher and zero bitrate count as offline', async () => 
   assert.equal(await h.api.fetchOpenIRL({ page: 'http://host/stats', key: 'live' }), null);
 });
 
-test('OpenRTMP modern flat and legacy streams formats', async () => {
+test('OpenRTMP public /stats uses only flat bitrate_kbps and rtt_ms', async () => {
   const h = createHarness();
   h.respondJson({ bitrate_kbps: 4300, rtt_ms: 14.8 });
-  const current = await h.api.fetchOpenRTMP({ page: 'http://host/stats', key: 'sts_demo' });
+  const stats = await h.api.fetchOpenRTMP({ page: 'http://host/stats', key: 'sts_demo' });
   assert.equal(h.urls.at(-1), 'http://host/stats?key=sts_demo');
-  assert.equal(current.bitrate, 4300);
-  assert.equal(current.rtt, 14.8);
+  assert.equal(stats.bitrate, 4300);
+  assert.equal(stats.rtt, 14.8);
 
+  // The streams array belongs to a different API, not public /stats.
   h.respondJson({ streams: [{ bitrate_kbps: 2380, rtt_ms: 30 }] });
-  const legacy = await h.api.fetchOpenRTMP({ page: 'http://host/stats?key=existing' });
-  assert.equal(legacy.bitrate, 2380);
+  assert.equal(await h.api.fetchOpenRTMP({ page: 'http://host/stats?key=existing' }), null);
 });
 
 test('OpenRTMP plain text offline and invalid metric values are safe', async () => {
