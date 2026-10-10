@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - "index.html"
-      - "colorBitrate.html"
+      - "bitrate.html"
       - "examples/**"
       - "docs/**"
       - ".github/workflows/pages.yml"
@@ -29,12 +29,14 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/configure-pages@v5
       - name: Build static site
         run: |
           set -euo pipefail
           mkdir -p _site
-          cp index.html colorBitrate.html _site/
+          cp index.html bitrate.html _site/
           cp -r examples docs _site/
           cp README.md _site/
           touch _site/.nojekyll

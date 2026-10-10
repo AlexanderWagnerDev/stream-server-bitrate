@@ -36,8 +36,8 @@ input[type=checkbox]{width:15px;height:15px;accent-color:#55bafb}
 button{border:1px solid #425b7e;background:#223650;color:#e9f5ff;border-radius:8px;padding:8px 12px;font-weight:750;cursor:pointer}
 button:hover{background:#345577}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #70c5fa;outline-offset:2px}
-.primary{background:#1586d0;border-color:#36a5ea;color:#fff}
-.primary:hover{background:#237fba}
+.primary{background:#0b578c;border-color:#3576a2;color:#fff}
+.primary:hover{background:#075079}
 .small{font-size:11px;padding:5px 8px;white-space:nowrap}
 .danger{background:#32212d;border-color:#764958}
 .server{background:var(--panel2);border:1px solid #364764;border-radius:10px;padding:12px;margin:8px 0}
@@ -60,7 +60,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .notice{border:1px solid #47617a;border-radius:10px;padding:13px 15px;background:#122438;font-size:12px;color:#c8ddf1;margin-top:12px}
 .actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
 #feedback{font-size:12px;color:#a9ddb5;margin-top:9px;min-height:18px}
-.code{font:12px/1.5 Consolas,monospace;word-break:break-word;color:#96d5ed}
+.code{font:12px/1.5 Consolas,monospace;overflow-wrap:anywhere;color:#96d5ed}
 @media(max-width:1030px){.layout{grid-template-columns:1fr}.preview-col{position:static;order:-1}.preview-stage{min-height:260px}}
 @media(max-width:530px){.fields{grid-template-columns:1fr}main{padding:16px 12px}.sidebar fieldset{padding:11px}}
 </style>
@@ -188,7 +188,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   <section class="preview-card">
     <div class="preview-head"><strong>Live design preview</strong><span>DEMO DATA · NO NETWORK REQUESTS</span></div>
     <div class="preview-stage">
-      <iframe id="preview" src="colorBitrate.html?demo=1&amp;srtla=1" title="Live preview of the current overlay settings"></iframe>
+      <iframe id="preview" src="bitrate.html?demo=1&amp;srtla=1" title="Live preview of the current overlay settings"></iframe>
     </div>
     <div class="preview-foot">The checkerboard imitates transparent OBS content. Metrics, bitrate graphs and SRTLA links are sample values. The exported HTML uses your configured server endpoints.</div>
   </section>
@@ -197,10 +197,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
     <button id="download" class="primary" type="button">Download OBS overlay (.html)</button>
     <button id="exportJson" type="button">Export settings (.json)</button>
     <button id="importJson" type="button">Import settings (.json)</button>
+    <label for="importFile" class="visually-hidden">Choose settings JSON file</label>
     <input id="importFile" type="file" accept=".json,application/json" hidden>
     <button id="reset" type="button">Reset settings</button>
   </div>
-  <div id="feedback" role="status" aria-live="polite"></div>
+  <output id="feedback" aria-live="polite"></output>
   <p class="hint">Once downloaded, in OBS add a Browser Source → Local file → select the generated HTML. The width and height above are a preview guide; apply those dimensions in OBS too. A static GitHub Pages build is available after the PR is merged and Pages is enabled in repository settings.</p>
 </div>
 </div>
@@ -258,6 +259,11 @@ const htmlEscape = value => String(value ?? "").replace(/[&<>"']/g, c => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 })[c]);
 const getField = path => path.split(".").reduce((p, k) => p?.[k], state);
+const asSameType = (previous, value, checked) => {
+  if (typeof previous === "number") return Number(value);
+  if (typeof previous === "boolean") return checked;
+  return String(value);
+};
 const setField = (path, value) => {
   const keys = path.split(".");
   let obj = state;
@@ -265,8 +271,7 @@ const setField = (path, value) => {
   const key = keys.at(-1);
   // All data-setting attributes below are static trusted markup.
   const old = obj[key];
-  obj[key] = typeof old === "number" ? Number(value) :
-    typeof old === "boolean" ? !!value : String(value);
+  obj[key] = asSameType(old, value, !!value);
 };
 const serverFields = [
   ["OpenRTMP", "OpenRTMP /stats?key="],
@@ -275,46 +280,67 @@ const serverFields = [
   ["NMS", "Node-Media-Server"],
   ["NGINX", "nginx-rtmp"],
 ];
+const serverSelectOptions = server => serverFields.map(([value, title]) =>
+  '<option value="' + value + '"' + (server.type === value ? ' selected' : '') +
+  '>' + htmlEscape(title) + '</option>').join('');
+
+const sourceTextField = (index, key, label, value, placeholder = '') =>
+  '<label class="full">' + label + '<input data-server="' + index +
+  '" data-key="' + key + '" value="' + htmlEscape(value) +
+  '" placeholder="' + htmlEscape(placeholder) + '"></label>';
+
+const sourceCheckbox = (index, key, text, checked) =>
+  '<label class="check"><input type="checkbox" data-server="' + index +
+  '" data-key="' + key + '"' + (checked ? ' checked' : '') + '>' + text + '</label>';
+
+const sourceKeyField = (server, index) => {
+  if (server.type === "NMS") return '';
+  if (server.type === "SRT") {
+    return sourceTextField(index, "publisher", "Publisher path", server.publisher);
+  }
+  let label = "Application tag";
+  if (server.type === "OpenIRL") label = "Player ID";
+  if (server.type === "OpenRTMP") label = "Stats key (not API token)";
+  const placeholder = server.type === "OpenRTMP" ? "sts_..." : "";
+  return sourceTextField(index, "key", label, server.key, placeholder);
+};
+
+const openIrlFields = (server, index) => {
+  if (server.type !== "OpenIRL") return '';
+  const options = ["off", "count", "details"].map(value =>
+    '<option value="' + value + '"' + (server.peer_display === value ? ' selected' : '') +
+    '>' + value + '</option>').join('');
+  return sourceCheckbox(index, "show_throughput", "Show throughput", server.show_throughput) +
+    '<label>SRTLA peer info<select data-server="' + index +
+    '" data-key="peer_display">' + options + '</select></label>' +
+    '<label>Maximum links<input type="number" min="1" max="16" data-server="' +
+    index + '" data-key="max_peers" value="' + htmlEscape(server.max_peers) + '"></label>';
+};
+
+const renderServer = (server, index) => {
+  const div = document.createElement("div");
+  div.className = "server";
+  const buttons = '<div class="row"><strong>Source ' + (index + 1) + '</strong>' +
+    '<div><button class="small" data-move="-1" data-index="' + index + '" type="button">↑</button> ' +
+    '<button class="small" data-move="1" data-index="' + index + '" type="button">↓</button> ' +
+    '<button class="small danger" data-remove data-index="' + index +
+    '" type="button">Remove</button></div></div>';
+  const fields = '<div class="fields"><label class="full">Server type' +
+    '<select data-server="' + index + '" data-key="type">' +
+    serverSelectOptions(server) + '</select></label>' +
+    sourceTextField(index, "page", "Stats URL", server.page, "https://server.example/stats") +
+    sourceKeyField(server, index) +
+    sourceTextField(index, "label", "Label", server.label) +
+    sourceCheckbox(index, "show_rtt", "Show RTT", server.show_rtt) +
+    sourceCheckbox(index, "show_label", "Show label", server.show_label) +
+    openIrlFields(server, index) + '</div>';
+  div.innerHTML = buttons + fields;
+  return div;
+};
+
 function renderServers() {
-  $("servers").replaceChildren();
-  state.servers.forEach((server, index) => {
-    const div = document.createElement("div");
-    div.className = "server";
-    const opts = serverFields.map(([value, title]) =>
-      '<option value="' + value + '"' + (server.type === value ? " selected" : "") +
-      '>' + htmlEscape(title) + '</option>').join("");
-    div.innerHTML = '<div class="row"><strong>Source ' + (index + 1) + '</strong>' +
-      '<div><button class="small" data-move="-1" data-index="' + index + '" type="button">↑</button> ' +
-      '<button class="small" data-move="1" data-index="' + index + '" type="button">↓</button> ' +
-      '<button class="small danger" data-remove data-index="' + index + '" type="button">Remove</button></div></div>' +
-      '<div class="fields"><label class="full">Server type<select data-server="' + index + '" data-key="type">' + opts +
-      '</select></label>' +
-      '<label class="full">Stats URL<input data-server="' + index + '" data-key="page" placeholder="https://server.example/stats" value="' + htmlEscape(server.page) + '"></label>' +
-      (server.type === "SRT" ?
-        '<label class="full">Publisher path<input data-server="' + index + '" data-key="publisher" value="' +
-          htmlEscape(server.publisher) + '"></label>' :
-        server.type === "NMS" ? '' :
-        '<label class="full">' +
-          (server.type === "OpenIRL" ? "Player ID" : server.type === "OpenRTMP" ? "Stats key (not API token)" : "Application tag") +
-          '<input data-server="' + index + '" data-key="key" value="' + htmlEscape(server.key) +
-          '" placeholder="' + (server.type === "OpenRTMP" ? "sts_..." : "") + '"></label>') +
-      '<label class="full">Label<input data-server="' + index + '" data-key="label" value="' + htmlEscape(server.label) +
-      '"></label>' +
-      '<label class="check"><input type="checkbox" data-server="' + index + '" data-key="show_rtt"' +
-       (server.show_rtt ? " checked" : "") + '>Show RTT</label>' +
-      '<label class="check"><input type="checkbox" data-server="' + index + '" data-key="show_label"' +
-       (server.show_label ? " checked" : "") + '>Show label</label>' +
-      (server.type === "OpenIRL" ?
-      '<label class="check"><input type="checkbox" data-server="' + index + '" data-key="show_throughput"' +
-        (server.show_throughput ? " checked" : "") + '>Show throughput</label>' +
-      '<label>SRTLA peer info<select data-server="' + index + '" data-key="peer_display">' +
-        ["off","count","details"].map(v=>'<option value="'+v+'"'+(server.peer_display===v?' selected':'')+'>'+v+'</option>').join("") +
-        '</select></label>' +
-      '<label>Maximum links<input type="number" min="1" max="16" data-server="' + index +
-        '" data-key="max_peers" value="' + htmlEscape(server.max_peers) + '"></label>' : '') +
-      '</div>';
-    $("servers").appendChild(div);
-  });
+  const container = $("servers");
+  container.replaceChildren(...state.servers.map(renderServer));
 }
 function renderWidgets() {
   $("widgets").replaceChildren();
@@ -366,8 +392,7 @@ document.addEventListener("change", event => {
     const i = Number(target.dataset.server);
     const key = target.dataset.key;
     const old = state.servers[i][key];
-    state.servers[i][key] = typeof old === "boolean" ? target.checked :
-      typeof old === "number" ? Number(target.value) : target.value;
+    state.servers[i][key] = asSameType(old, target.value, target.checked);
     if (key === "type") {
       state.servers[i].label = target.value;
       renderServers();
@@ -382,17 +407,17 @@ document.addEventListener("change", event => {
 document.addEventListener("click", event => {
   const btn = event.target.closest("button");
   if (!btn) return;
-  if (btn.hasAttribute("data-remove")) {
+  if (btn.dataset.remove !== undefined) {
     if (state.servers.length > 1) state.servers.splice(Number(btn.dataset.index), 1);
     else state.servers = [];
     renderServers();
-  } else if (btn.hasAttribute("data-move")) {
+  } else if (btn.dataset.move !== undefined) {
     const i = Number(btn.dataset.index), j = i + Number(btn.dataset.move);
     if (j >= 0 && j < state.servers.length) {
       [state.servers[i], state.servers[j]] = [state.servers[j], state.servers[i]];
       renderServers();
     }
-  } else if (btn.hasAttribute("data-widget-move")) {
+  } else if (btn.dataset.widgetMove !== undefined) {
     const key = btn.dataset.widgetMove;
     const i = state.display.order.indexOf(key), j = i + Number(btn.dataset.step);
     if (i >= 0 && j >= 0 && j < state.display.order.length) {
@@ -428,7 +453,7 @@ function downloadJson() {
 $("exportJson").addEventListener("click", downloadJson);
 $("download").addEventListener("click", async () => {
   try {
-    const response = await fetch("./colorBitrate.html", {cache:"no-store"});
+    const response = await fetch("./bitrate.html", {cache:"no-store"});
     if (!response.ok) throw new Error("Could not load overlay template");
     const html = await response.text();
     const marker = "const EMBEDDED_SETTINGS = null; // GENERATED_OVERLAY_SETTINGS";
@@ -437,9 +462,9 @@ $("download").addEventListener("click", async () => {
       report("Add at least one stats server with a URL before exporting.");
       return;
     }
-    const json = JSON.stringify(state).replace(/</g, "\\u003c")
-      .replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
-    const exported = html.replace(marker,
+    const json = JSON.stringify(state).replaceAll("<", String.raw`\u003c`)
+      .replaceAll("\u2028", String.raw`\u2028`).replaceAll("\u2029", String.raw`\u2029`);
+    const exported = html.replaceAll(marker,
       "const EMBEDDED_SETTINGS = " + json + "; // GENERATED_OVERLAY_SETTINGS");
     download(new Blob([exported], {type:"text/html;charset=utf-8"}), "stream-bitrate-obs.html");
     report("Overlay downloaded. Set the matching width/height in OBS. Keep stats keys private.");

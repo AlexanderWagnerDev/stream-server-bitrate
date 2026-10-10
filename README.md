@@ -41,7 +41,7 @@ The deprecated OpenIRL `?legacy=1` format instead uses `publishers.live` and lac
 
 ## Setup
 
-Download [colorBitrate.html](colorBitrate.html), open it in a text editor, and change the `servers` array at the beginning of its `<script>` section.
+Download [bitrate.html](bitrate.html), open it in a text editor, and change the `servers` array at the beginning of its `<script>` section.
 
 ```js
 const interval = 2000;
@@ -53,7 +53,7 @@ const servers = [
     show_rtt: true, show_label: true, peer_display: "details", max_peers: 4 },
 
   // Fall back to OpenRTMP. The "key" is the per-stream stats_key.
-  { type: "OpenRTMP", page: "http://127.0.0.1:8080/stats", key: "sts_your_stats_key",
+  { type: "OpenRTMP", page: "http://127.0.0.1:8081/stats", key: "sts_your_stats_key",
     show_rtt: true, show_label: true },
 
   // Traditional SRT-Live-Server format (if you use that implementation):
@@ -105,7 +105,7 @@ SRTLA details show **LINK 1**, **LINK 2**, etc. with bitrate and jitter; the num
 | `gradient` | Accent-tinted gradient panel |
 | `ticker` | Compact horizontal information ribbon |
 
-All themes work with every configured server source; none requires a particular bitrate API. Change the `design` object in `colorBitrate.html`:
+All themes work with every configured server source; none requires a particular bitrate API. Change the `design` object in `bitrate.html`:
 
 ```js
 const design = {
@@ -152,7 +152,7 @@ The selected preset provides a layout and decorative frame. Your own colors, lab
 You can also open a **single** design directly, without configuring any server:
 
 ```text
-colorBitrate.html?demo=1&preset=glass
+bitrate.html?demo=1&preset=glass
 ```
 
 `demo=1` is opt-in and only displays known synthetic values; it performs **no stats requests**. Remove the demo query parameter to use live data in OBS. Additional *demo-only* parameters: `layout=horizontal`, `indicator=bar`, `fontSize=26`, `accent=%2338bdf8`, `srtla=1`. For permanent settings, edit the `design` object. Never use a URL with `demo=1` as the live OBS source.
@@ -170,7 +170,7 @@ Adjust these in the `thresholds` object: `bitrate_orange`, `bitrate_red`, `rtt_o
 ## OBS Browser Source
 
 1. Add a **Browser Source** in OBS.
-2. Enable **Local file** and select `colorBitrate.html`.
+2. Enable **Local file** and select `bitrate.html`.
 3. Set its dimensions to fit your chosen preset (for example 300 × 100 for classic; increase height when showing individual SRTLA links).
 4. Optionally enable **Shutdown source when not visible**.
 
@@ -211,4 +211,4 @@ Ein konfigurierbares OBS-Bitrate-Overlay mit automatischem Server-Fallback, 12 D
 - **Darstellung:** 12 Presets: `classic`, `minimal`, `pill`, `card`, `glass`, `neon`, `broadcast`, `terminal`, `outline`, `scoreboard`, `gradient` und `ticker`. Zusätzlich einstellbar: Ausrichtung, Schrift, Farben, Abstände, Transparenz, Akzentfarbe, Rahmen, Status-Indikator sowie kb/s oder Mb/s. **[Beispielbilder](docs/theme-previews.svg)** und **[interaktive Vorschau](examples/themes.html)** (Repository herunterladen und lokal öffnen).
 - **Schwellenwerte:** Bitrate grün über 2500, orange bis 2500, rot bis 1200 kb/s. RTT grün unter 120, orange ab 120, rot ab 250 ms. Beide unter `thresholds` anpassbar.
 
-In OBS eine Browser-Quelle mit **Lokale Datei** hinzufügen und `colorBitrate.html` oder die **generierte HTML-Datei** auswählen. Im [visuellen Generator](index.html) lassen sich Server, Schwellenwerte, Graphen, Widgets, Reihenfolge, Layouts, Designs und Darstellung einstellen. Über GitHub Pages erreichbar, sobald der PR gemergt, Pages aktiviert und das Deployment erfolgreich ist. Alternativ lokal mit `python3 -m http.server 8000` starten. Keine externen Bibliotheken nötig.
+In OBS eine Browser-Quelle mit **Lokale Datei** hinzufügen und `bitrate.html` oder die **generierte HTML-Datei** auswählen. Im [visuellen Generator](index.html) lassen sich Server, Schwellenwerte, Graphen, Widgets, Reihenfolge, Layouts, Designs und Darstellung einstellen. Über GitHub Pages erreichbar, sobald der PR gemergt, Pages aktiviert und das Deployment erfolgreich ist. Alternativ lokal mit `python3 -m http.server 8000` starten. Keine externen Bibliotheken nötig.

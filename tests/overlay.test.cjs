@@ -6,10 +6,12 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-const html = fs.readFileSync(path.join(__dirname, '..', 'colorBitrate.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '..', 'bitrate.html'), 'utf8');
 const match = html.match(/<script>([\s\S]*?)<\/script>/);
-assert.ok(match, 'overlay has a JavaScript block');
-const script = match[1];
+const script = match?.[1] ?? '';
+test('overlay HTML contains a JavaScript block', () => {
+  assert.ok(match, 'overlay has a JavaScript block');
+});
 
 class Element {
   constructor() {
@@ -242,7 +244,7 @@ test('generator template is replaceable and GitHub Pages builder has safe export
   const marker = 'const EMBEDDED_SETTINGS = null; // GENERATED_OVERLAY_SETTINGS';
   assert.ok(html.includes(marker));
   assert.ok(generator.includes(marker));
-  assert.ok(generator.includes('fetch("./colorBitrate.html"'));
+  assert.ok(generator.includes('fetch("./bitrate.html"'));
   assert.ok(generator.includes('bitrate-overlay-preview'));
   assert.ok(generator.includes('never sends your stream keys'));
 });

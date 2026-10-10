@@ -50,7 +50,7 @@
   <div class="eyebrow">Stream Server Bitrate · Design Studio</div>
   <h1>Choose your OBS overlay style.</h1>
   <p class="intro">12 real rendering presets, shown with <strong>synthetic demo statistics</strong> (3,480 kb/s · RTT 46 ms).
-    Nothing here connects to your servers. Every preview uses the same <code>colorBitrate.html</code> file as OBS.</p>
+    Nothing here connects to your servers. Every preview uses the same <code>bitrate.html</code> file as OBS.</p>
   <div class="toolbar">
     <label class="control">Layout
       <select id="layout"><option value="vertical">Vertical</option><option value="horizontal">Horizontal</option></select>
@@ -71,7 +71,7 @@
   </div>
   <div id="gallery" class="grid"></div>
   <p class="footer">The sample data is for appearance testing only. In OBS, the actual overlay fetches bitrate and RTT from your configured servers.
-    <a href="../README.md">Documentation</a> · <a href="../colorBitrate.html?demo=1&amp;preset=classic">Open single demo</a></p>
+    <a href="../README.md">Documentation</a> · <a href="../bitrate.html?demo=1&amp;preset=classic">Open single demo</a></p>
 </main>
 <script>
   const presets = [
@@ -150,13 +150,13 @@
     });
     document.getElementById("sizeLabel").textContent = params.get("fontSize") + "px";
     for (const frame of document.querySelectorAll("iframe[data-preset]")) {
-      const u = new URL("../colorBitrate.html", window.location.href);
+      const u = new URL("../bitrate.html", window.location.href);
       u.search = params.toString();
       u.searchParams.set("preset", frame.dataset.preset);
       if (frame.src !== u.toString()) frame.src = u.toString();
     }
     for (const link of document.querySelectorAll("[data-preset-link]")) {
-      const u = new URL("../colorBitrate.html", window.location.href);
+      const u = new URL("../bitrate.html", window.location.href);
       u.search = params.toString();
       u.searchParams.set("preset", link.dataset.presetLink);
       link.href = u.toString();
