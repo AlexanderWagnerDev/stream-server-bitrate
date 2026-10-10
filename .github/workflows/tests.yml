@@ -41,11 +41,17 @@ jobs:
             --screenshot="$GITHUB_WORKSPACE/screenshots/theme-gallery.png" \
             "file://$GITHUB_WORKSPACE/examples/themes.html"
           test -s screenshots/theme-gallery.png
+          "$BROWSER" --headless --disable-gpu --disable-dev-shm-usage \
+            --no-sandbox --hide-scrollbars --window-size=1440,2200 \
+            --virtual-time-budget=8000 \
+            --screenshot="$GITHUB_WORKSPACE/screenshots/overlay-builder.png" \
+            "file://$GITHUB_WORKSPACE/index.html"
+          test -s screenshots/overlay-builder.png
 
       - name: Upload theme gallery screenshot
         uses: actions/upload-artifact@v4
         with:
-          name: obs-overlay-theme-screenshots
-          path: screenshots/theme-gallery.png
+          name: obs-overlay-design-previews
+          path: screenshots/*.png
           if-no-files-found: error
           retention-days: 30
