@@ -240,7 +240,7 @@ const defaults = {
   interval: 2000, request_timeout: 4000,
   servers: [{
     type: "OpenRTMP", page: "https://example.invalid/stats", key: "", publisher: "",
-    show_rtt: true, show_label: true, label: "OpenRTMP",
+    show_rtt: true, show_label: false, label: "OpenRTMP",
     show_throughput: false, peer_display: "off", max_peers: 4,
   }],
   design: {
@@ -409,7 +409,14 @@ function syncPreview() {
   iframe.style.height = h + "px";
   if (!iframe.contentWindow) return;
   // Never send server URLs or keys to a preview; the demo uses synthetic data only.
-  const settings = {design: state.design, display: state.display, thresholds: state.thresholds};
+  const firstServer = state.servers[0];
+  const serverPreview = {
+    label: firstServer?.label || "",
+    show_label: !!firstServer?.show_label,
+  };
+  const settings = {
+    design: state.design, display: state.display, thresholds: state.thresholds, serverPreview,
+  };
   iframe.contentWindow.postMessage({type:"bitrate-overlay-preview", settings},
     window.location.origin === "null" ? "*" : window.location.origin);
   // Keep the live preview fully visible even if custom text wraps into more lines.
@@ -421,12 +428,15 @@ function checkPreviewSize(requestedHeight) {
     const content = frame.contentDocument?.getElementById("overlay");
     if (!content) return;
     const bounds = content.getBoundingClientRect();
-    const requiredHeight = Math.ceil(bounds.bottom + 18);
+    const bodyStyle = frame.contentWindow.getComputedStyle(frame.contentDocument.body);
+    const paddingTop = Number.parseFloat(bodyStyle.paddingTop) || 0;
+    const paddingBottom = Number.parseFloat(bodyStyle.paddingBottom) || 0;
+    const requiredHeight = Math.ceil(bounds.height + paddingTop + paddingBottom + 12);
     const height = Math.max(requestedHeight, requiredHeight);
     frame.style.height = height + "px";
     $("sizeWarning").textContent = requiredHeight > requestedHeight
-      ? "The chosen content needs at least " + requiredHeight +
-        "px in height. The preview was expanded to prevent clipping; use that height or larger in OBS."
+      ? "Your content needs about " + requiredHeight +
+        "px of height. The preview expanded to avoid clipping; use at least that height in OBS."
       : "";
   } catch {
     // The generator also works if the browser prevents iframe measurements.
