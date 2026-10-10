@@ -2,6 +2,25 @@
 
 A lightweight, single-file, transparent HTML overlay for **OBS Browser Sources**. Show live bitrate, RTT and optional OpenIRL SRTLA connection details with server fallback and custom visual presets. No build step or external JavaScript libraries.
 
+## Visual OBS Overlay Builder (GitHub Pages)
+
+**[Open the visual builder (after GitHub Pages is enabled)](https://alexanderwagnerdev.github.io/stream-server-bitrate/)** or open [`index.html`](index.html) using a local web server (`python3 -m http.server 8000`; then visit `http://localhost:8000/`). The builder is a standalone static website requiring **no database, login, third-party service, analytics or API access**. It does not send your stats keys anywhere; all configuration happens inside your browser.
+
+The builder includes:
+
+- **Bitrate and RTT history graphs** with up to 600 in-memory samples, colored lines, optional area fill, configurable history length and auto/fixed scale. Offline polls create gaps rather than plotting incorrect zero values. A 60-sample history at a 2-second poll interval represents roughly two minutes.
+- **Toggleable widgets** for current bitrate, RTT, online/offline state, stream uptime (if provided by the API), OpenIRL throughput/SRTLA connections, a bitrate progress bar, a bitrate history graph and a separate RTT graph.
+- **Reorderable widgets** (move up/down), six independent metric layouts (`vertical`, `horizontal`, `compact`, `grid`, `split`, `dashboard`) and 12 visual theme presets.
+- Advanced **appearance controls**: colors, background transparency, typography, number/label sizing, spacing, position, framing, offline text, bitrate units, metric indicator shape, and style.
+- **Multiple fallback servers**; configurable source type, stats URL, stats/player key, status labels and refresh/timeout values.
+- Configurable bitrate/RTT color thresholds, a live **synthetic-data preview** (no stats endpoint contacted), adjustable OBS preview dimensions, JSON settings import/export and **downloadable standalone OBS HTML file** with settings included.
+
+To use the generated result in OBS: download the HTML, create a Browser Source, enable **Local file**, select the downloaded HTML and match its preview width and height in OBS. No external chart library or runtime dependency is necessary; the graph uses inline SVG. The generated overlay can also be used as a hosted page only if the hosting configuration protects the stats key and permits browser cross-origin access.
+
+**GitHub Pages deployment:** after merging the PR, configure repository Settings → Pages → **Source: GitHub Actions**. The `Deploy overlay builder to GitHub Pages` workflow packages the static frontend and deploys on pushes to `main`. The website will typically be at `https://alexanderwagnerdev.github.io/stream-server-bitrate/`, but is **not live until Pages is enabled and deployment succeeds**. The [GitHub Actions overlay tests](.github/workflows/tests.yml) also capture real browser screenshots of both the theme gallery and the generator as downloadable artifacts.
+
+**Security and limitations:** The editor never fetches your real stats endpoint. The browser preview deliberately receives *only appearance, widget and threshold settings*, not URLs or keys. Your downloaded HTML/JSON does contain credentials needed to access stream stats; don't commit those files to public GitHub repositories or share them publicly. CORS and mixed-content restrictions apply when OBS accesses real stats endpoints. Stream graphs are session-local, reset when OBS reloads the page, and skip data while offline.
+
 ## Supported server stats
 
 | Type | Stats format | URL/key |
@@ -124,7 +143,7 @@ const design = {
 };
 ```
 
-On pull requests, the **Overlay tests** GitHub Actions workflow also captures an **actual Chrome screenshot** of the complete theme gallery. Open the latest successful workflow run and download the `obs-overlay-theme-screenshots` artifact. Unlike the illustrative SVG above, this PNG is captured directly from `examples/themes.html` running the real overlay previews.
+On pull requests, the **Overlay tests** GitHub Actions workflow also captures an **actual Chrome screenshot** of the complete theme gallery. Open the latest successful workflow run and download the `obs-overlay-design-previews` artifact. Unlike the illustrative SVG above, this PNG is captured directly from `examples/themes.html` running the real overlay previews.
 
 The selected preset provides a layout and decorative frame. Your own colors, labels, font sizes, background opacity, and status threshold settings still apply. `classic` remains the backward-compatible default; the existing `show_dot` field is still supported.
 
@@ -184,7 +203,7 @@ MIT — see [LICENSE](LICENSE). Originally based on [b3ck/server-bitrate-html](h
 
 # Deutsch – Kurzanleitung
 
-Ein transparentes OBS-Bitrate-Overlay mit automatischem Server-Fallback und vier Design-Presets.
+Ein konfigurierbares OBS-Bitrate-Overlay mit automatischem Server-Fallback, 12 Design-Presets, Bitrate-/RTT-Verlaufsgraphen und einem visuellen Generator.
 
 - **OpenIRL SLS (SRT und SRTLA):** `{ type: "OpenIRL", page: "http://server:8080/stats", key: "player_id", show_rtt: true }`. Bei SRTLA können mit `peer_display: "count"` oder `"details"` die Verbindungen und deren Bitraten/Jitter eingeblendet werden. Die Gesamtbitrate stammt direkt vom Server; RTT ist die Publisher-RTT, nicht die RTT jeder Verbindung.
 - **OpenRTMP librtmp2-server:** `{ type: "OpenRTMP", page: "http://server:8080/stats", key: "sts_...", show_rtt: true }`. Hier ist `key` der Stats-Key, kein API-Token. Bei Browser-Quellen **CORS beachten**, siehe oben.
@@ -192,4 +211,4 @@ Ein transparentes OBS-Bitrate-Overlay mit automatischem Server-Fallback und vier
 - **Darstellung:** 12 Presets: `classic`, `minimal`, `pill`, `card`, `glass`, `neon`, `broadcast`, `terminal`, `outline`, `scoreboard`, `gradient` und `ticker`. Zusätzlich einstellbar: Ausrichtung, Schrift, Farben, Abstände, Transparenz, Akzentfarbe, Rahmen, Status-Indikator sowie kb/s oder Mb/s. **[Beispielbilder](docs/theme-previews.svg)** und **[interaktive Vorschau](examples/themes.html)** (Repository herunterladen und lokal öffnen).
 - **Schwellenwerte:** Bitrate grün über 2500, orange bis 2500, rot bis 1200 kb/s. RTT grün unter 120, orange ab 120, rot ab 250 ms. Beide unter `thresholds` anpassbar.
 
-In OBS eine Browser-Quelle mit **Lokale Datei** hinzufügen und `colorBitrate.html` auswählen. Alle Einstellungen stehen direkt in dieser Datei; zusätzliche Pakete sind nicht erforderlich.
+In OBS eine Browser-Quelle mit **Lokale Datei** hinzufügen und `colorBitrate.html` oder die **generierte HTML-Datei** auswählen. Im [visuellen Generator](index.html) lassen sich Server, Schwellenwerte, Graphen, Widgets, Reihenfolge, Layouts, Designs und Darstellung einstellen. Über GitHub Pages erreichbar, sobald der PR gemergt, Pages aktiviert und das Deployment erfolgreich ist. Alternativ lokal mit `python3 -m http.server 8000` starten. Keine externen Bibliotheken nötig.
