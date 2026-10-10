@@ -28,7 +28,7 @@ class Element {
   }
 }
 
-function createHarness() {
+function createHarness(href = 'http://localhost/overlay.html') {
   const overlay = new Element();
   const urls = [];
   let result = { ok: false };
@@ -42,7 +42,7 @@ function createHarness() {
 
   const context = vm.createContext({
     document,
-    window: { location: { href: 'http://localhost/overlay.html' } },
+    window: { location: { href } },
     URL,
     AbortController,
     clearTimeout() {},
@@ -146,4 +146,38 @@ test('OpenRTMP plain text offline and invalid metric values are safe', async () 
   assert.equal(await h.api.fetchOpenRTMP({ page: 'http://host/stats?key=demo' }), null);
   assert.equal(h.api.normalized(0, 22), null);
   assert.equal(h.api.normalized('oops', 22), null);
+});
+
+test('all 12 theme presets render demo stats without a network request', () => {
+  const names = [
+    'classic', 'minimal', 'pill', 'card',
+    'glass', 'neon', 'broadcast', 'terminal',
+    'outline', 'scoreboard', 'gradient', 'ticker',
+  ];
+  for (const preset of names) {
+    const h = createHarness('http://localhost/overlay.html?demo=1&preset=' + preset);
+    assert.match(h.overlay.className, new RegExp('preset-' + preset));
+    assert.equal(h.overlay.children.length, 2, preset + ' displays bitrate and RTT');
+    assert.ok(h.overlay.children[0].children.some(
+      (node) => node.textContent.includes('3480 kb/s'),
+    ));
+    assert.deepEqual(h.urls, [], preset + ' preview must not fetch stats');
+  }
+});
+
+test('interactive demo options apply indicators, orientation, and two SRTLA links', () => {
+  const h = createHarness(
+    'http://localhost/overlay.html?demo=1&preset=glass&layout=horizontal' +
+    '&indicator=bar&fontSize=28&accent=%23aa88ff&srtla=1',
+  );
+  assert.match(h.overlay.className, /preset-glass/);
+  assert.match(h.overlay.className, /layout-horizontal/);
+  assert.match(h.overlay.className, /indicator-bar/);
+  assert.equal(h.overlay.children.length, 5); // bitrate + RTT + count + two peers
+  assert.deepEqual(h.urls, []);
+});
+
+test('unknown theme does not escape the safe preset allowlist', () => {
+  const h = createHarness('http://localhost/overlay.html?demo=1&preset=unknown');
+  assert.match(h.overlay.className, /preset-classic/);
 });
