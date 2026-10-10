@@ -187,6 +187,36 @@
     }
     #overlay.preset-ticker .row + .row { border-left: 1px solid var(--border); padding-left: 13px; }
     #overlay.preset-ticker .row { font-size: calc(var(--font-size) * 0.9); }
+
+    /* Metric layout is independent of the decorative preset. */
+    #overlay.layout-grid,
+    #overlay.layout-dashboard,
+    #overlay.layout-split {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, max-content));
+      align-items: start;
+    }
+    #overlay.layout-grid .chart,
+    #overlay.layout-dashboard .chart,
+    #overlay.layout-split .chart,
+    #overlay.layout-dashboard .bar-widget,
+    #overlay.layout-split .bar-widget {
+      grid-column: 1 / -1;
+    }
+    #overlay.layout-dashboard { grid-template-columns: repeat(2, minmax(110px, 1fr)); min-width: 290px; }
+    #overlay.layout-dashboard .row { padding: 3px 6px; }
+    #overlay.layout-split { grid-template-columns: repeat(2, minmax(0, max-content)); column-gap: 18px; }
+    #overlay.layout-compact { flex-direction: row; flex-wrap: wrap; align-items: center; }
+    .chart { position: relative; width: min(100%, var(--chart-width)); min-width: min(180px, 100%); }
+    .chart-label { display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; font-size: var(--label-size); letter-spacing: .06em;
+      font-weight: 700; color: var(--color-muted); }
+    .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .bar-widget { width: min(100%, var(--chart-width)); min-width: min(160px, 100%); }
+    .bar-track { height: var(--bar-height); border: 1px solid var(--border);
+      border-radius: var(--radius); background: rgba(127, 145, 180, .18); overflow: hidden; }
+    .bar-fill { height: 100%; background: currentColor; transition: width .2s linear; }
+    .metric-status { font-size: var(--label-size); letter-spacing: .1em; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -195,8 +225,11 @@
   <script>
     // ─── Server configuration ──────────────────────────────────────────────────
     // First server returning a positive bitrate wins. Others are fallbacks.
-    const interval = 2000;        // Milliseconds between completed polls
-    const request_timeout = 4000; // Milliseconds per endpoint
+    // The visual generator replaces ONLY this marker when exporting a local HTML file.
+    // Do not publish exported files containing stats keys to a public web server.
+    const EMBEDDED_SETTINGS = null; // GENERATED_OVERLAY_SETTINGS
+    const interval = Math.min(60000, Math.max(500, Number(EMBEDDED_SETTINGS?.interval) || 2000));
+    const request_timeout = Math.min(30000, Math.max(500, Number(EMBEDDED_SETTINGS?.request_timeout) || 4000));
 
     const servers = [
       // SRT-Live-Server /stats (publisher stream path)
@@ -264,6 +297,48 @@
       rtt_orange: 120,      // >= 120 ms => orange
       rtt_red: 250,         // >= 250 ms => red
     };
+
+    // Every widget can be enabled independently and ordered in the generator.
+    const display = {
+      bitrate: true,
+      rtt: true,
+      throughput: true,   // Only displayed when server.show_throughput is true
+      peers: true,        // Only displayed when server.peer_display is enabled
+      uptime: false,
+      status: false,
+      graph: false,
+      rtt_graph: false,
+      bitrate_bar: false,
+      title: "",
+      history_points: 60,
+      graph_width: 320,
+      graph_height: 105,
+      graph_color: "status", // "status" or "accent"
+      graph_fill: true,
+      graph_grid: true,
+      graph_max: 0,       // 0 = automatic max, in kb/s or ms
+      bar_max: 6000,      // kb/s full-scale
+      bar_height: 10,
+      order: ["bitrate", "rtt", "throughput", "peers", "uptime", "status",
+        "bitrate_bar", "graph", "rtt_graph"],
+    };
+    if (EMBEDDED_SETTINGS && typeof EMBEDDED_SETTINGS === "object") {
+      if (Array.isArray(EMBEDDED_SETTINGS.servers)) {
+        servers.splice(0, servers.length, ...EMBEDDED_SETTINGS.servers.slice(0, 20));
+      }
+      if (EMBEDDED_SETTINGS.design && typeof EMBEDDED_SETTINGS.design === "object") {
+        const overrides = EMBEDDED_SETTINGS.design;
+        Object.assign(design, overrides);
+        design.colors = { green: "#4ade80", orange: "#fb923c", red: "#f87171",
+          muted: "rgba(255, 255, 255, 0.65)", ...(overrides.colors || {}) };
+      }
+      if (EMBEDDED_SETTINGS.thresholds && typeof EMBEDDED_SETTINGS.thresholds === "object") {
+        Object.assign(thresholds, EMBEDDED_SETTINGS.thresholds);
+      }
+      if (EMBEDDED_SETTINGS.display && typeof EMBEDDED_SETTINGS.display === "object") {
+        Object.assign(display, EMBEDDED_SETTINGS.display);
+      }
+    }
     // ──────────────────────────────────────────────────────────────────────────
 
     const numeric = (value) => {
@@ -298,7 +373,8 @@
       try {
         const data = await response.json();
         const publisherData = data.publishers?.[publisher];
-        return publisherData ? normalized(publisherData.bitrate, publisherData.rtt) : null;
+        const stats = publisherData ? normalized(publisherData.bitrate, publisherData.rtt) : null;
+        return stats ? { ...stats, uptime: numeric(publisherData.uptime) } : null;
       } catch {
         return null;
       }
@@ -326,6 +402,7 @@
         return {
           ...stats,
           throughput: numeric(publisher.throughput),
+          uptime: numeric(publisher.uptime),
           peers: peers && peers.map((peer) => ({
             bitrate: numeric(peer.bitrate),
             throughput: numeric(peer.throughput),
@@ -349,7 +426,8 @@
         if (!response) return null;
         // Public /stats returns a flat, per-stream JSON object.
         const data = await response.json();
-        return normalized(data.bitrate_kbps, data.rtt_ms);
+        const stats = normalized(data.bitrate_kbps, data.rtt_ms);
+        return stats ? { ...stats, uptime: numeric(data.uptime) } : null;
       } catch {
         // OpenRTMP responds with "Stream offline" as plain text when offline.
         return null;
@@ -431,6 +509,8 @@
       css("--border-width", Math.max(0, Number(design.border_width) || 0) + "px");
       css("--indicator-size", Math.max(0, Number(design.indicator_size) || 0) + "px");
       css("--value-spacing", Number(design.letter_spacing) + "px");
+      css("--chart-width", Math.max(120, Math.min(960, Number(display.graph_width) || 320)) + "px");
+      css("--bar-height", Math.max(3, Math.min(50, Number(display.bar_height) || 10)) + "px");
       css("--shadow", design.text_shadow ? "0 1px 4px rgba(0, 0, 0, 0.7)" : "none");
       document.body.style.padding = design.padding;
       const alignments = { left: "flex-start", center: "center", right: "flex-end" };
@@ -440,7 +520,8 @@
         "broadcast", "terminal", "outline", "scoreboard", "gradient", "ticker"];
       const indicators = ["dot", "square", "bar", "none"];
       overlay.className = "preset-" + (presets.includes(design.preset) ? design.preset : "classic") +
-        " layout-" + (design.layout === "horizontal" ? "horizontal" : "vertical") +
+        " layout-" + (["vertical", "horizontal", "compact", "grid", "split", "dashboard"].includes(design.layout)
+          ? design.layout : "vertical") +
         " indicator-" + (indicators.includes(design.indicator_style) ? design.indicator_style : "dot");
       overlay.style.alignItems = alignments[design.align] || "flex-end";
     };
@@ -468,54 +549,190 @@
       return amount + (isMbps ? " Mb/s" : " kb/s");
     };
 
-    const render = (result) => {
-      const overlay = document.getElementById("overlay");
-      if (!result) {
-        overlay.replaceChildren(makeRow(design.offline_text, "no-signal red", null));
-        return;
-      }
-      const { data, server } = result;
-      const brColor = statusColor(data.bitrate, thresholds.bitrate_orange, thresholds.bitrate_red, false);
-      const brLabel = server.show_label ? server.label || server.type :
-        design.show_bitrate_label ? "BITRATE" : null;
-      const rows = [makeRow(displayBitrate(data.bitrate), brColor, brLabel)];
-      if (server.show_rtt && data.rtt !== null) {
-        const rttColor = statusColor(data.rtt, thresholds.rtt_orange, thresholds.rtt_red, true);
-        const rttValue = Math.round(data.rtt) + (design.show_units ? " ms" : "");
-        rows.push(makeRow(rttValue, rttColor, "RTT"));
-      }
-      if (server.show_throughput && data.throughput !== null && data.throughput !== undefined) {
-        rows.push(makeRow(displayBitrate(data.throughput), "detail", "NETWORK"));
-      }
-      if (Array.isArray(data.peers) && server.peer_display !== "off" && server.peer_display) {
-        rows.push(makeRow(data.peers.length + " links", "detail", "SRTLA"));
-        if (server.peer_display === "details") {
-          const maxPeers = Math.max(0, Math.min(16, Number(server.max_peers) || 4));
-          for (const [index, peer] of data.peers.slice(0, maxPeers).entries()) {
-            const values = [];
-            if (peer.bitrate !== null) values.push(displayBitrate(peer.bitrate));
-            if (peer.jitter !== null) values.push(peer.jitter.toFixed(1) + " ms jitter");
-            rows.push(makeRow(values.join(" · ") || "–", "detail", "LINK " + (index + 1)));
-          }
+    // Graph data is deliberately ephemeral. Never persist stream keys or stats history.
+    const history = [];
+    const recordSample = (result) => {
+      history.push(result ? { bitrate: result.data.bitrate, rtt: result.data.rtt } : null);
+      const limit = Math.min(600, Math.max(5, Number(display.history_points) || 60));
+      if (history.length > limit) history.splice(0, history.length - limit);
+    };
+    const svgNode = (name, attributes) => {
+      const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+      for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+      return node;
+    };
+    const makeGraph = (metric, title, cssColor) => {
+      const width = Math.max(120, Math.min(960, Number(display.graph_width) || 320));
+      const height = Math.max(50, Math.min(300, Number(display.graph_height) || 105));
+      const points = history.slice(-Math.min(600, Math.max(5, Number(display.history_points) || 60)));
+      const values = points.map((sample) => sample && numeric(sample[metric]));
+      const defined = values.filter((v) => v !== null && v >= 0);
+      const observedMax = defined.length ? Math.max(...defined) : 0;
+      const configuredMax = numeric(display.graph_max);
+      const ceiling = configuredMax && configuredMax > 0 ? configuredMax :
+        Math.max(metric === "rtt" ? 100 : 3000, Math.ceil(observedMax * 1.2 / 100) * 100);
+      const card = document.createElement("div");
+      card.className = "chart";
+      const label = document.createElement("div");
+      label.className = "chart-label";
+      label.appendChild(span("", title), span("", metric === "rtt"
+        ? Math.round(ceiling) + " ms" : displayBitrate(ceiling)));
+      const svg = svgNode("svg", { viewBox: `0 0 ${width} ${height}`, role: "img",
+        "aria-label": title + " history, latest " + (defined.at(-1) ?? 0) });
+      const padding = 5;
+      const bottom = height - padding;
+      const plotH = height - padding * 2;
+      if (display.graph_grid) {
+        for (let i = 0; i <= 4; i++) {
+          svg.appendChild(svgNode("line", { x1: 0, y1: padding + plotH * i / 4,
+            x2: width, y2: padding + plotH * i / 4,
+            stroke: "var(--border)", "stroke-width": 1 }));
         }
       }
-      overlay.replaceChildren(...rows);
+      const slots = Math.max(2, Number(display.history_points) || 60);
+      const graphPoints = values.map((value, i) => {
+        if (value === null || value < 0) return null;
+        return [(width - 2) * i / (slots - 1), bottom - Math.min(value / ceiling, 1) * plotH];
+      });
+      // Disconnect lines across offline samples. Do not draw false dips to zero.
+      const segments = [];
+      let segment = [];
+      for (const p of graphPoints) {
+        if (p) segment.push(p);
+        else if (segment.length) { segments.push(segment); segment = []; }
+      }
+      if (segment.length) segments.push(segment);
+      const color = display.graph_color === "accent" ? "var(--accent)" : cssColor;
+      for (const pointsInSegment of segments) {
+        const path = pointsInSegment.map(([x, y], i) =>
+          (i ? "L" : "M") + x.toFixed(2) + " " + y.toFixed(2)).join(" ");
+        if (display.graph_fill && pointsInSegment.length > 1) {
+          const first = pointsInSegment[0][0];
+          const last = pointsInSegment.at(-1)[0];
+          svg.appendChild(svgNode("path", { d: path + " L" + last + " " + bottom +
+            " L" + first + " " + bottom + " Z", fill: color,
+          "fill-opacity": 0.13, stroke: "none" }));
+        }
+        svg.appendChild(svgNode("path", { d: path, fill: "none", stroke: color,
+          "stroke-width": Math.max(1, Number(display.graph_line_width) || 2),
+          "stroke-linejoin": "round", "stroke-linecap": "round" }));
+        const last = pointsInSegment.at(-1);
+        svg.appendChild(svgNode("circle", { cx: last[0], cy: last[1], r: 2.8, fill: color }));
+      }
+      card.append(label, svg);
+      return card;
+    };
+    const makeBar = (bitrate, color) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "bar-widget " + color;
+      const header = document.createElement("div");
+      header.className = "chart-label";
+      header.append(span("", "BITRATE LEVEL"), span("", displayBitrate(Number(display.bar_max) || 6000)));
+      const track = document.createElement("div");
+      track.className = "bar-track";
+      const fill = document.createElement("div");
+      fill.className = "bar-fill";
+      const max = Math.max(1, Number(display.bar_max) || 6000);
+      fill.style.width = Math.max(0, Math.min(100, bitrate / max * 100)) + "%";
+      track.appendChild(fill);
+      wrapper.append(header, track);
+      return wrapper;
+    };
+    const formatUptime = (seconds) => {
+      const s = Math.max(0, Math.floor(seconds));
+      const pad = n => String(n).padStart(2, "0");
+      const hours = Math.floor(s / 3600);
+      return hours + ":" + pad(Math.floor(s % 3600 / 60)) + ":" + pad(s % 60);
+    };
+    const render = (result) => {
+      const overlay = document.getElementById("overlay");
+      const widgets = {};
+      if (!result) {
+        widgets.bitrate = [makeRow(design.offline_text, "no-signal red", null)];
+      } else {
+        const { data, server } = result;
+        const brColor = statusColor(data.bitrate, thresholds.bitrate_orange, thresholds.bitrate_red, false);
+        const brLabel = server.show_label ? server.label || server.type :
+          design.show_bitrate_label ? "BITRATE" : null;
+        if (display.bitrate) widgets.bitrate = [makeRow(displayBitrate(data.bitrate), brColor, brLabel)];
+        if (display.rtt && server.show_rtt && data.rtt !== null) {
+          const rttColor = statusColor(data.rtt, thresholds.rtt_orange, thresholds.rtt_red, true);
+          widgets.rtt = [makeRow(Math.round(data.rtt) + (design.show_units ? " ms" : ""), rttColor, "RTT")];
+        }
+        if (display.throughput && server.show_throughput &&
+            data.throughput !== null && data.throughput !== undefined) {
+          widgets.throughput = [makeRow(displayBitrate(data.throughput), "detail", "NETWORK")];
+        }
+        if (display.peers && Array.isArray(data.peers) && server.peer_display !== "off" && server.peer_display) {
+          const peers = [makeRow(data.peers.length + " links", "detail", "SRTLA")];
+          if (server.peer_display === "details") {
+            const maxPeers = Math.max(0, Math.min(16, Number(server.max_peers) || 4));
+            for (const [index, peer] of data.peers.slice(0, maxPeers).entries()) {
+              const values = [];
+              if (peer.bitrate !== null) values.push(displayBitrate(peer.bitrate));
+              if (peer.jitter !== null) values.push(peer.jitter.toFixed(1) + " ms jitter");
+              peers.push(makeRow(values.join(" · ") || "–", "detail", "LINK " + (index + 1)));
+            }
+          }
+          widgets.peers = peers;
+        }
+        if (display.uptime && data.uptime !== null && data.uptime !== undefined) {
+          widgets.uptime = [makeRow(formatUptime(data.uptime), "detail", "UPTIME")];
+        }
+        if (display.bitrate_bar) widgets.bitrate_bar = [makeBar(data.bitrate, brColor)];
+        if (display.status) widgets.status = [makeRow("LIVE", "green metric-status", "STATUS")];
+      }
+      if (!result && display.status) widgets.status = [makeRow("OFFLINE", "red metric-status", "STATUS")];
+      if (display.graph) widgets.graph = [makeGraph("bitrate", "BITRATE HISTORY",
+        result ? "var(--color-" + statusColor(result.data.bitrate,
+          thresholds.bitrate_orange, thresholds.bitrate_red, false) + ")" : "var(--color-muted)")];
+      if (display.rtt_graph) widgets.rtt_graph = [makeGraph("rtt", "RTT HISTORY",
+        result && result.data.rtt !== null ? "var(--color-" + statusColor(result.data.rtt,
+          thresholds.rtt_orange, thresholds.rtt_red, true) + ")" : "var(--color-muted)")];
+
+      const allowed = ["bitrate", "rtt", "throughput", "peers", "uptime", "status",
+        "bitrate_bar", "graph", "rtt_graph"];
+      const order = Array.isArray(display.order) ? display.order : allowed;
+      const ordered = [...new Set([...order.filter(name => allowed.includes(name)), ...allowed])];
+      const elements = ordered.flatMap((name) => widgets[name] || []);
+      if (display.title && typeof display.title === "string") {
+        elements.unshift(span("label overlay-title", display.title.slice(0, 100)));
+      }
+      overlay.replaceChildren(...elements);
     };
 
     // Sequential polling avoids overlapping requests during server outages.
     const tick = async () => {
       try {
-        render(await getBitrate());
+        const result = await getBitrate();
+        recordSample(result);
+        render(result);
       } catch {
         render(null);
       } finally {
         setTimeout(tick, Math.max(250, interval));
       }
     };
-    // Built-in example mode uses synthetic values: no server request, no private key.
-    // Open examples/themes.html to compare every preset without a streaming server.
+    // Built-in example mode uses synthetic values, never user-provided credentials.
     const previewParams = new URL(window.location.href).searchParams;
     const demoMode = previewParams.get("demo") === "1";
+    const samplePreview = () => {
+      const result = { data: {
+        bitrate: 3480, rtt: 46, throughput: 3720, uptime: 3825,
+        peers: [{ bitrate: 1900, jitter: 2.3 }, { bitrate: 1580, jitter: 3.8 }],
+      }, server: {
+        type: "OpenIRL", show_rtt: true, show_label: true, show_throughput: true,
+        label: "LIVE", peer_display: previewParams.get("srtla") === "1" ? "details" : "off",
+        max_peers: 2,
+      } };
+      const count = Math.min(600, Math.max(5, Number(display.history_points) || 60));
+      history.length = 0;
+      for (let i = 0; i < count; i++) {
+        history.push({ bitrate: 2900 + Math.sin(i * 0.31) * 450 + Math.cos(i * .13) * 180,
+          rtt: 45 + Math.sin(i * .23) * 18 + Math.cos(i * .09) * 7 });
+      }
+      render(result);
+    };
     if (demoMode) {
       const preset = previewParams.get("preset");
       const allowedPresets = ["classic", "pill", "card", "minimal", "glass", "neon",
@@ -541,19 +758,25 @@
         design.accent_color = "#4ade80";
       }
       applyDesign();
-      render({
-        data: {
-          bitrate: 3480,
-          rtt: 46,
-          throughput: 3720,
-          peers: [{ bitrate: 1900, jitter: 2.3 }, { bitrate: 1580, jitter: 3.8 }],
-        },
-        server: {
-          type: "OpenIRL", show_rtt: true, show_label: true, label: "LIVE",
-          peer_display: previewParams.get("srtla") === "1" ? "details" : "off",
-          max_peers: 2,
-        },
-      });
+      samplePreview();
+      // Accept appearance-only preview updates from same-origin generator iframe.
+      // Never accept server credentials via postMessage, and never make API calls here.
+      if (typeof window.addEventListener === "function") {
+        window.addEventListener("message", (event) => {
+          if (event.source !== window.parent || event.origin !== window.location.origin ||
+              !event.data || event.data.type !== "bitrate-overlay-preview") return;
+          const cfg = event.data.settings;
+          if (!cfg || typeof cfg !== "object") return;
+          if (cfg.design && typeof cfg.design === "object") {
+            Object.assign(design, cfg.design);
+            if (cfg.design.colors) design.colors = { ...design.colors, ...cfg.design.colors };
+          }
+          if (cfg.display && typeof cfg.display === "object") Object.assign(display, cfg.display);
+          if (cfg.thresholds && typeof cfg.thresholds === "object") Object.assign(thresholds, cfg.thresholds);
+          applyDesign();
+          samplePreview();
+        });
+      }
     } else {
       applyDesign();
       tick();
