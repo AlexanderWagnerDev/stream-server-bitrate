@@ -522,6 +522,16 @@
         "broadcast", "terminal", "outline", "scoreboard", "gradient", "ticker"];
       if (allowedPresets.includes(preset)) design.preset = preset;
       if (previewParams.get("layout") === "horizontal") design.layout = "horizontal";
+      const demoSize = Number(previewParams.get("fontSize"));
+      if (previewParams.has("fontSize") && Number.isFinite(demoSize) && demoSize >= 12 && demoSize <= 48) {
+        design.font_size = demoSize;
+      }
+      const demoAccent = previewParams.get("accent");
+      if (demoAccent && /^#[0-9a-fA-F]{6}$/.test(demoAccent)) design.accent_color = demoAccent;
+      const demoIndicator = previewParams.get("indicator");
+      if (["dot", "square", "bar", "none"].includes(demoIndicator)) {
+        design.indicator_style = demoIndicator;
+      }
       design.align = "left";
       design.show_bitrate_label = true;
       // Each example shows the same sample values to allow visual comparison.
